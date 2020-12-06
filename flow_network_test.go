@@ -1,4 +1,4 @@
-package graph_test
+package flownet_test
 
 import (
 	"bufio"
@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kalexmills/push-relabel/graph"
+	"github.com/kalexmills/flownet"
 )
 
 func TestAllTestData(t *testing.T) {
@@ -19,6 +19,9 @@ func TestAllTestData(t *testing.T) {
 			return err
 		}
 		if info.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(path, ".dat") {
 			return nil
 		}
 		f, err := os.Open(path)
@@ -30,12 +33,12 @@ func TestAllTestData(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		return runTest(t, instance)
+		return runTest(t, filepath.Base(path), instance)
 	})
 }
 
-func runTest(t *testing.T, instance testInstance) error {
-	graph := graph.NewGraph(instance.numNodes)
+func runTest(t *testing.T, path string, instance TestInstance) error {
+	graph := flownet.NewGraph(instance.numNodes)
 	for edge, cap := range instance.capacities {
 		if err := graph.AddEdge(edge.from, edge.to, cap); err != nil {
 			t.Error(err)
@@ -43,8 +46,15 @@ func runTest(t *testing.T, instance testInstance) error {
 	}
 	graph.PushRelabel()
 	outflow := graph.Outflow()
+	if instance.expectedFlow == -1 { // run sanity checks
+		if err := flownet.SanityChecks(graph); err != nil {
+			t.Errorf("sanity checks failed: %v", err)
+			return err
+		}
+		return nil
+	}
 	if instance.expectedFlow != outflow {
-		t.Errorf("expected max-flow of %d but was %d", instance.expectedFlow, outflow)
+		t.Errorf("failed test %s expected max-flow of %d but was %d", path, instance.expectedFlow, outflow)
 	}
 	return nil
 }
@@ -54,18 +64,18 @@ func runTest(t *testing.T, instance testInstance) error {
 // the expected max flow which is attainable for the test instance. All remaining lines of the file are either empty
 // or consist of 3 integers describing one directed edge of the flow network. The first two integers are the source
 // and destination nodes of the edge, respectively, while the third integer is the maximum capacity of the edge.
-func loadInstance(reader io.Reader) (testInstance, error) {
+func loadInstance(reader io.Reader) (TestInstance, error) {
 	scanner := bufio.NewScanner(reader)
 	if !scanner.Scan() {
-		return testInstance{}, scanner.Err()
+		return TestInstance{}, scanner.Err()
 	}
 	expectedFlow, err := strconv.ParseInt(scanner.Text(), 10, 32)
 	if err != nil {
-		return testInstance{}, fmt.Errorf("first line of file must consist of a single integer: %w", err)
+		return TestInstance{}, fmt.Errorf("first line of file must consist of a single integer: %w", err)
 	}
-	result := testInstance{
+	result := TestInstance{
 		expectedFlow: expectedFlow,
-		capacities:   make(map[edge]int64),
+		capacities:   make(map[Edge]int64),
 	}
 	maxNodeId := 0
 	for scanner.Scan() {
@@ -74,13 +84,13 @@ func loadInstance(reader io.Reader) (testInstance, error) {
 		}
 		fields := strings.Split(scanner.Text(), " ")
 		if len(fields) != 3 {
-			return testInstance{}, fmt.Errorf("expected 3 space-separated fields on line reading: %s", scanner.Text())
+			return TestInstance{}, fmt.Errorf("expected 3 space-separated fields on line reading: %s", scanner.Text())
 		}
 		ints, err := parseInts(fields)
 		if err != nil {
-			return testInstance{}, fmt.Errorf("could not parse line as integers: %w", err)
+			return TestInstance{}, fmt.Errorf("could not parse line as integers: %w", err)
 		}
-		result.capacities[edge{ints[0], ints[1]}] = int64(ints[2])
+		result.capacities[Edge{ints[0], ints[1]}] = int64(ints[2])
 		maxNodeId = max(max(maxNodeId, ints[0]), ints[1])
 	}
 	result.numNodes = maxNodeId + 1
@@ -99,13 +109,13 @@ func parseInts(strs []string) ([]int, error) {
 	return result, nil
 }
 
-type testInstance struct {
+type TestInstance struct {
 	numNodes     int
 	expectedFlow int64
-	capacities   map[edge]int64
+	capacities   map[Edge]int64
 }
 
-type edge struct {
+type Edge struct {
 	from, to int
 }
 

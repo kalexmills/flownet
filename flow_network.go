@@ -1,11 +1,11 @@
-package graph
+package flownet
 
 import (
 	"fmt"
 	"math"
 )
 
-type Graph struct {
+type FlowNetwork struct {
 	numNodes int
 	capacity map[edge]int64
 	preflow  map[edge]int64
@@ -27,8 +27,8 @@ const sourceID = 0
 const sinkID = 1
 
 // NewGraph constructs a new graph, allocating an initial capacity for the provided number of nodes.
-func NewGraph(numNodes int) Graph {
-	result := Graph{
+func NewGraph(numNodes int) FlowNetwork {
+	result := FlowNetwork{
 		numNodes: numNodes,
 		capacity: make(map[edge]int64, 2*numNodes), // preallocate assuming avg. node degree = 2
 		preflow:  make(map[edge]int64, 2*numNodes),
@@ -45,7 +45,7 @@ func NewGraph(numNodes int) Graph {
 }
 
 // Outflow returns the amount of flow leaving the network via the sink.
-func (g Graph) Outflow() int64 {
+func (g FlowNetwork) Outflow() int64 {
 	result := int64(0)
 	for edge, flow := range g.preflow {
 		if edge.to == sinkID {
@@ -56,23 +56,23 @@ func (g Graph) Outflow() int64 {
 }
 
 // Flow returns the flow along an edge.
-func (g Graph) Flow(from, to int) int64 {
+func (g FlowNetwork) Flow(from, to int) int64 {
 	return g.preflow[edge{from + 2, to + 2}]
 }
 
 // Residual returns the residual flow along an edge.
-func (g Graph) Residual(from, to int) int64 {
+func (g FlowNetwork) Residual(from, to int) int64 {
 	e := edge{from + 2, to + 2}
-	return g.capacity[e] - g.preflow[e]
+	return g.residual(e)
 }
 
 // residual returns the same result as Residual, but could be cheaper for internal use
-func (g Graph) residual(e edge) int64 {
+func (g FlowNetwork) residual(e edge) int64 {
 	return g.capacity[e] - g.preflow[e]
 }
 
 // AddNode adds a new node to the graph and returns its ID.
-func (g *Graph) AddNode() int {
+func (g *FlowNetwork) AddNode() int {
 	id := g.numNodes
 	g.numNodes++
 	g.excess = append(g.excess, 0)
@@ -84,7 +84,7 @@ func (g *Graph) AddNode() int {
 
 // AddEdge sets the capacity of an edge in the flow network. An error is returned if either fromID or
 // toID are not valid node IDs.
-func (g *Graph) AddEdge(fromID, toID int, capacity int64) error {
+func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
 	if fromID < 0 || fromID >= g.numNodes {
 		return fmt.Errorf("no node with ID %d is known", fromID)
 	}
@@ -99,7 +99,7 @@ func (g *Graph) AddEdge(fromID, toID int, capacity int64) error {
 }
 
 // PushRelabel finds a maximum flow via the push-relabel algorithm.
-func (g *Graph) PushRelabel() {
+func (g *FlowNetwork) PushRelabel() {
 	g.reset()
 	nodeQueue := make([]int, 0, g.numNodes)
 	for i := 0; i < g.numNodes; i++ {
@@ -120,14 +120,13 @@ func (g *Graph) PushRelabel() {
 	}
 }
 
-func (g *Graph) active(nodeID int) bool {
+func (g *FlowNetwork) active(nodeID int) bool {
 	return nodeID != sinkID && g.excess[nodeID] > 0
 }
 
 // push moves all excess flow across the provided edge
-func (g *Graph) push(e edge) {
+func (g *FlowNetwork) push(e edge) {
 	delta := min64(g.excess[e.from], g.residual(e))
-	fmt.Printf("push    %d units from %d -> %d\n", delta, e.from-2, e.to-2)
 	g.preflow[e] += delta
 	g.preflow[e.reverse()] -= delta
 	g.excess[e.from] -= delta
@@ -135,8 +134,7 @@ func (g *Graph) push(e edge) {
 }
 
 // relabel increases the label of an empty node to the minimum of its neighbors
-func (g *Graph) relabel(nodeID int) {
-	priorLabel := g.label[nodeID]
+func (g *FlowNetwork) relabel(nodeID int) {
 	minHeight := math.MaxInt64
 	for i := 0; i < g.numNodes+2; i++ {
 		if g.residual(edge{nodeID, i}) > 0 {
@@ -144,11 +142,10 @@ func (g *Graph) relabel(nodeID int) {
 			g.label[nodeID] = minHeight + 1
 		}
 	}
-	fmt.Printf("relabel %d from %d to %d\n", nodeID-2, priorLabel, g.label[nodeID])
 }
 
 // discharge pushes as much excess from nodeID to its unvisited neighbors as possible.
-func (g *Graph) discharge(nodeID int) {
+func (g *FlowNetwork) discharge(nodeID int) {
 	for g.excess[nodeID] > 0 {
 		if g.seen[nodeID] < g.numNodes+2 {
 			v := g.seen[nodeID]
@@ -166,7 +163,7 @@ func (g *Graph) discharge(nodeID int) {
 }
 
 // reset prepares the network for computing a new flow.
-func (g *Graph) reset() {
+func (g *FlowNetwork) reset() {
 	g.label[sourceID] = g.numNodes + 2
 	g.label[sinkID] = 0
 	for i := 0; i < g.numNodes; i++ {
@@ -176,7 +173,7 @@ func (g *Graph) reset() {
 		g.preflow[id] = 0
 	}
 	// set the capacity of edges from source; using the max outgoing capacity of any node adjacent to source.
-	totalCapacity := int64(0) // N.B. totalCapacity exists to force a panic on integer overflow during tests.
+	totalCapacity := int64(0) // N.B. totalCapacity only exists to force a panic on integer overflow during tests.
 	for u := 0; u < g.numNodes; u++ {
 		if _, ok := g.capacity[edge{sourceID, u + 2}]; !ok {
 			continue
@@ -210,4 +207,50 @@ func min(x, y int) int {
 		return x
 	}
 	return y
+}
+
+// SanityChecks runs several sanity checks against a FlowNetwork that has had previously had its
+// flow computed.
+func SanityChecks(fn FlowNetwork) error {
+	nodeflow := make(map[int]int64) // computes residual flow stored at nodes to ensure inflow == outflow
+	for edge, flow := range fn.preflow {
+		if cap, ok := fn.capacity[edge]; ok {
+			if flow > cap {
+				return fmt.Errorf("capacity of %d on edge from %d to %d exceeded by flow %d", cap, edge.from, edge.to, flow)
+			}
+			nodeflow[edge.from] -= flow
+			nodeflow[edge.to] += flow
+		} else if flow > 0 {
+			return fmt.Errorf("flow of %d reported on edge from %d to %d, but found no capacity record for that edge", flow, edge.from, edge.to)
+		}
+	}
+	// ensure inflow == outflow; nodeflow should be zero for every node other than source and sink.
+	for node, flowDiff := range nodeflow {
+		if node != sourceID && node != sinkID && flowDiff != 0 {
+			return fmt.Errorf("node %d does not have its inflow equal to its outflow", node)
+		}
+	}
+	// attempt to find an augmenting path in the graph, return an error if one is found.
+	return augmentingPathCheck(fn)
+}
+
+// augmentingPathCheck returns an error if any augmenting path is found in the residual flow network.
+func augmentingPathCheck(fn FlowNetwork) error {
+	// run a from source to sink using the residual flow network, if you find a path, it's wrong.
+	frontier := []int{sourceID}
+	visited := make(map[int]struct{})
+	for len(frontier) > 0 {
+		curr := frontier[0]
+		frontier = frontier[1:]
+		visited[curr] = struct{}{}
+		for i := 0; i < fn.numNodes+2; i++ {
+			if _, ok := visited[i]; !ok && fn.residual(edge{curr, i}) > 0 {
+				if i == sinkID {
+					return fmt.Errorf("found an augmenting path from source to sink via edge %d; flow is not maximum", curr)
+				}
+				frontier = append(frontier, i)
+			}
+		}
+	}
+	return nil
 }
