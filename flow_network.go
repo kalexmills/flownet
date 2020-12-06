@@ -44,7 +44,8 @@ func NewGraph(numNodes int) FlowNetwork {
 	return result
 }
 
-// Outflow returns the amount of flow leaving the network via the sink.
+// Outflow returns the amount of flow leaving the network via the sink. This is the solution to the
+// typical max flow problem.
 func (g FlowNetwork) Outflow() int64 {
 	result := int64(0)
 	for edge, flow := range g.preflow {
@@ -213,15 +214,17 @@ func min(x, y int) int {
 // flow computed.
 func SanityChecks(fn FlowNetwork) error {
 	nodeflow := make(map[int]int64) // computes residual flow stored at nodes to ensure inflow == outflow
-	for edge, flow := range fn.preflow {
-		if cap, ok := fn.capacity[edge]; ok {
+	for e, flow := range fn.preflow {
+		if cap, ok := fn.capacity[e]; ok {
 			if flow > cap {
-				return fmt.Errorf("capacity of %d on edge from %d to %d exceeded by flow %d", cap, edge.from, edge.to, flow)
+				return fmt.Errorf("capacity of %d on edge from %d to %d exceeded by flow %d", cap, e.from, e.to, flow)
 			}
-			nodeflow[edge.from] -= flow
-			nodeflow[edge.to] += flow
-		} else if flow > 0 {
-			return fmt.Errorf("flow of %d reported on edge from %d to %d, but found no capacity record for that edge", flow, edge.from, edge.to)
+			nodeflow[e.from] -= flow
+			nodeflow[e.to] += flow
+		} else {
+			if _, ok := fn.capacity[edge{e.to, e.from}]; flow > 0 || (flow < 0 && !ok) {
+				return fmt.Errorf("flow of %d reported on edge from %d to %d, but found no capacity record for that edge", flow, e.from, e.to)
+			}
 		}
 	}
 	// ensure inflow == outflow; nodeflow should be zero for every node other than source and sink.
