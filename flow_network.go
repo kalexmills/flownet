@@ -102,6 +102,7 @@ func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
 // PushRelabel finds a maximum flow via the push-relabel algorithm.
 func (g *FlowNetwork) PushRelabel() {
 	g.reset()
+	// TODO: topological sort for great heuristic goodness
 	nodeQueue := make([]int, 0, g.numNodes)
 	for i := 0; i < g.numNodes; i++ {
 		nodeQueue = append(nodeQueue, i+2)
@@ -119,10 +120,6 @@ func (g *FlowNetwork) PushRelabel() {
 			p--
 		}
 	}
-}
-
-func (g *FlowNetwork) active(nodeID int) bool {
-	return nodeID != sinkID && g.excess[nodeID] > 0
 }
 
 // push moves all excess flow across the provided edge
