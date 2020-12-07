@@ -3,6 +3,7 @@ package flownet
 import (
 	"fmt"
 	"math"
+	"sort"
 )
 
 // Source is the ID of the source pseudonode.
@@ -11,22 +12,34 @@ const Source int = -2
 // Sink is the ID of the sink pseudonode.
 const Sink int = -1
 
-// FlowNetwork is a directed graph in which each edge is associated with a capacity.
+// FlowNetwork is a directed graph in which each edge is associated with a capacity. It facilitates
+// running the PushRelabel algorithm.
 //
 // By default, nodes which do not have any incoming edges are presumed to be connected to the source,
 // while nodes which have no outgoing edges are presumed to be connected to the sink. These default
 // source/sink connections all have maximum capacity of math.MaxInt64. The first time AddEdge is called
-// with a value of either flownet.Source or flownet.Sink, all presumed edges to the respective node are
-// cleared and the programmer becomes responsible for managing all edges to the respective node.
+// with a value of either flownet.Source or flownet.Sink, all the presumptive edges to the respective
+// node are cleared and the programmer becomes responsible for managing all edges to the Source or Sink,
+// respectively.
 type FlowNetwork struct {
-	numNodes     int
-	capacity     map[edge]int64
-	preflow      map[edge]int64
-	excess       []int64
-	label        []int
-	seen         []int
+	// numNodes is the total number of nodes in this network other than the source and sink.
+	numNodes int
+	// nodeOrder contains the order in which nodes are discharged.
+	nodeOrder []int
+	// capacity contains a map from each edge to its capacity.
+	capacity map[edge]int64
+	// preflow contains a map from each edge to its flow value.
+	preflow map[edge]int64
+	// excess stores the excess flow at each node.
+	excess []int64
+	// label stores the label of each node.
+	label []int
+	// seen stores the last node seen by each node for use during the discharge operation.
+	seen []int
+	// manualSource is true only if the programmer has manually added an edge leaving flownet.Source.
 	manualSource bool
-	manualSink   bool
+	// manualSink is true only if the programmer has manually added an edge entering flownet.Sink.
+	manualSink bool
 }
 
 // Edge represents a directed edge from the node with ID 'from' to the node with ID 'to'.
@@ -122,7 +135,7 @@ func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
 		g.enableManualSink()
 	}
 
-	// actually set the capacity! woo!
+	// actually set the capacity! woo! (finally)
 	g.capacity[edge{fromID + 2, toID + 2}] = capacity
 
 	// auto-remove any connections from/to the source/sink pseudonodes (if they're managed automatically)
@@ -135,36 +148,39 @@ func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
 	return nil
 }
 
-func (g *FlowNetwork) enableManualSource() {
-	if g.manualSource {
-		return
+// SetNodeOrder sets the order in which nodes are visited by the PushRelabel algorithm. As long as all of
+// the nodeIDs are conatined in provided array, the PushRelabel algorithm will work properly. If some nodeID
+// is missing, an error is returned and the order remains unchanged.
+func (g *FlowNetwork) SetNodeOrder(nodeIDs []int) error {
+	if len(nodeIDs) != g.numNodes {
+		return fmt.Errorf("not enough nodeIDs; expected %d of them", g.numNodes)
 	}
-	g.manualSource = true
-	// disconnect all nodes from source/sink; programmer wants to do it themselves.
-	for i := 2; i < g.numNodes+2; i++ {
-		delete(g.capacity, edge{sourceID, i})
+	ids := make(map[int]struct{})
+	mappedIds := make([]int, 0, g.numNodes)
+	for _, id := range nodeIDs {
+		if id < 0 || id >= g.numNodes {
+			return fmt.Errorf("unknown node ID %d", id)
+		}
+		ids[id] = struct{}{}
+		mappedIds = append(mappedIds, id+2)
 	}
-}
-
-func (g *FlowNetwork) enableManualSink() {
-	if g.manualSink {
-		return
+	if len(ids) != g.numNodes {
+		return fmt.Errorf("duplicate nodeIDs were present, saw %d unique ids", len(ids))
 	}
-	g.manualSink = true
-	// disconnect all nodes from source/sink; programmer wants to do it themselves.
-	for i := 2; i < g.numNodes+2; i++ {
-		delete(g.capacity, edge{i, sinkID})
-	}
+	g.nodeOrder = mappedIds
+	return nil
 }
 
 // PushRelabel finds a maximum flow via the push-relabel algorithm.
 func (g *FlowNetwork) PushRelabel() {
 	g.reset()
-	// TODO: topological sort for great heuristic goodness
-	nodeQueue := make([]int, 0, g.numNodes)
-	for i := 0; i < g.numNodes; i++ {
-		nodeQueue = append(nodeQueue, i+2)
+	if len(g.nodeOrder) != g.numNodes {
+		g.nodeOrder = make([]int, 0, g.numNodes)
+		for i := 0; i < g.numNodes; i++ {
+			g.nodeOrder = append(g.nodeOrder, i+2)
+		}
 	}
+	nodeQueue := append(make([]int, 0, g.numNodes), g.nodeOrder...)
 	p := len(nodeQueue) - 1
 	for p >= 0 {
 		u := nodeQueue[p]
@@ -251,6 +267,28 @@ func (g *FlowNetwork) reset() {
 	}
 }
 
+func (g *FlowNetwork) enableManualSource() {
+	if g.manualSource {
+		return
+	}
+	g.manualSource = true
+	// disconnect all nodes from source/sink; programmer wants to do it themselves.
+	for i := 2; i < g.numNodes+2; i++ {
+		delete(g.capacity, edge{sourceID, i})
+	}
+}
+
+func (g *FlowNetwork) enableManualSink() {
+	if g.manualSink {
+		return
+	}
+	g.manualSink = true
+	// disconnect all nodes from source/sink; programmer wants to do it themselves.
+	for i := 2; i < g.numNodes+2; i++ {
+		delete(g.capacity, edge{i, sinkID})
+	}
+}
+
 func min64(x, y int64) int64 {
 	if x < y {
 		return x
@@ -263,6 +301,50 @@ func min(x, y int) int {
 		return x
 	}
 	return y
+}
+
+// TopSort returns a topological sort of the nodes in the provided FlowNetwork, starting from the nodes
+// connected to the source, using the provided less function to break any ties found. If the flow network
+// passed is not a DAG, this function may not produce desirable results.
+func TopSort(fn FlowNetwork, less func(int, int) bool) []int {
+	type frontierRecord struct {
+		nodeID int
+		depth  int
+	}
+	frontier := []frontierRecord{{sourceID, 0}} // BFS search frontier
+	visited := make(map[int]struct{})           // set of visited node IDs.
+	result := make([]int, 0, fn.numNodes)       // result to return
+	currDepth := 0                              // the current being searched
+	nodesAtDepth := make([]int, 0, fn.numNodes) // all nodeIDs seen at depth currDepth so far.
+	for len(frontier) > 0 {
+		curr := frontier[0]
+		frontier := frontier[1:]
+		visited[curr.nodeID] = struct{}{}
+		// visit curr
+		if curr.nodeID != Source && curr.nodeID != Sink {
+			// this relies on the property of BFS that all nodes at the same depth are visited before nodes
+			// at the next depth. We store all the nodes at the same depth in a bucket and sort them once
+			// we see a node with a different depth.
+			if curr.depth == currDepth {
+				nodesAtDepth = append(nodesAtDepth, curr.depth)
+			} else {
+				// starting a new depth, so sort all the nodes at the same depth and commit them to the result.
+				currDepth = curr.depth
+				sort.SliceStable(nodesAtDepth, func(i, j int) bool {
+					return less(nodesAtDepth[i], nodesAtDepth[j])
+				})
+				result = append(result, nodesAtDepth...)
+				nodesAtDepth = nodesAtDepth[len(nodesAtDepth)-1:]
+			}
+		}
+		// add neighbors of curr to the search frontier.
+		for i := 0; i < fn.numNodes+1; i++ {
+			if _, ok := visited[i]; !ok && fn.capacity[edge{curr.nodeID, i}] > 0 {
+				frontier = append(frontier, frontierRecord{i, curr.depth + 1})
+			}
+		}
+	}
+	return result
 }
 
 // SanityCheckFlowNetwork runs several sanity checks against a FlowNetwork that has had previously had its
