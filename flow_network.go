@@ -5,13 +5,28 @@ import (
 	"math"
 )
 
+// Source is the ID of the source pseudonode.
+const Source int = -2
+
+// Sink is the ID of the sink pseudonode.
+const Sink int = -1
+
+// FlowNetwork is a directed graph in which each edge is associated with a capacity.
+//
+// By default, nodes which do not have any incoming edges are presumed to be connected to the source,
+// while nodes which have no outgoing edges are presumed to be connected to the sink. These default
+// source/sink connections all have maximum capacity of math.MaxInt64. The first time AddEdge is called
+// with a value of either flownet.Source or flownet.Sink, all presumed edges to the respective node are
+// cleared and the programmer becomes responsible for managing all edges to the respective node.
 type FlowNetwork struct {
-	numNodes int
-	capacity map[edge]int64
-	preflow  map[edge]int64
-	excess   []int64
-	label    []int
-	seen     []int
+	numNodes     int
+	capacity     map[edge]int64
+	preflow      map[edge]int64
+	excess       []int64
+	label        []int
+	seen         []int
+	manualSource bool
+	manualSink   bool
 }
 
 // Edge represents a directed edge from the node with ID 'from' to the node with ID 'to'.
@@ -23,10 +38,11 @@ func (e edge) reverse() edge {
 	return edge{from: e.to, to: e.from}
 }
 
+// internal source and sink IDs... why not?
 const sourceID = 0
 const sinkID = 1
 
-// NewFlowNetwork constructs a new graph, allocating an initial capacity for the provided number of nodes.
+// NewFlowNetwork constructs a new graph, preallocating enough memory for the provided number of nodes.
 func NewFlowNetwork(numNodes int) FlowNetwork {
 	result := FlowNetwork{
 		numNodes: numNodes,
@@ -84,19 +100,61 @@ func (g *FlowNetwork) AddNode() int {
 }
 
 // AddEdge sets the capacity of an edge in the flow network. An error is returned if either fromID or
-// toID are not valid node IDs. Adding an edge twice has no additional effect.
+// toID are not valid node IDs. Adding an edge twice has no additional effect. Attempting to
+// use flownet.Source as toId or flownet.Sink as fromID yields an error.
 func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
-	if fromID < 0 || fromID >= g.numNodes {
+	if fromID < -2 || fromID >= g.numNodes {
 		return fmt.Errorf("no node with ID %d is known", fromID)
 	}
-	if toID < 0 || toID >= g.numNodes {
+	if toID < -2 || toID >= g.numNodes {
 		return fmt.Errorf("no node with ID %d is known", toID)
 	}
+	if toID == Source {
+		return fmt.Errorf("no node can connect to the source pseudonode")
+	}
+	if fromID == Sink {
+		return fmt.Errorf("no node can be connected to from the sink pseudonode")
+	}
+	if fromID == Source {
+		g.enableManualSource()
+	}
+	if toID == Sink {
+		g.enableManualSink()
+	}
+
+	// actually set the capacity! woo!
 	g.capacity[edge{fromID + 2, toID + 2}] = capacity
-	// remove any connections from/to the source/sink pseudonodes, if they exist.
-	delete(g.capacity, edge{sourceID, toID + 2})
-	delete(g.capacity, edge{fromID + 2, sinkID})
+
+	// auto-remove any connections from/to the source/sink pseudonodes (if they're managed automatically)
+	if !g.manualSource {
+		delete(g.capacity, edge{sourceID, toID + 2})
+	}
+	if !g.manualSink {
+		delete(g.capacity, edge{fromID + 2, sinkID})
+	}
 	return nil
+}
+
+func (g *FlowNetwork) enableManualSource() {
+	if g.manualSource {
+		return
+	}
+	g.manualSource = true
+	// disconnect all nodes from source/sink; programmer wants to do it themselves.
+	for i := 2; i < g.numNodes+2; i++ {
+		delete(g.capacity, edge{sourceID, i})
+	}
+}
+
+func (g *FlowNetwork) enableManualSink() {
+	if g.manualSink {
+		return
+	}
+	g.manualSink = true
+	// disconnect all nodes from source/sink; programmer wants to do it themselves.
+	for i := 2; i < g.numNodes+2; i++ {
+		delete(g.capacity, edge{i, sinkID})
+	}
 }
 
 // PushRelabel finds a maximum flow via the push-relabel algorithm.

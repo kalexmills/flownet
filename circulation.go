@@ -3,7 +3,9 @@ package flownet
 import "fmt"
 
 // Circulation is a flow network which additionally requires every edge in the flow network to satisfy
-// a certain amount of demand.
+// a certain amount of demand. Nodes in a circulation are not connected the source or sink as in a
+// traditional flow network. Attempting to add an edge to or from the Source or Sink nodes in a
+// circulation will result in an error.
 type Circulation struct {
 	FlowNetwork
 	demand map[edge]int64
@@ -22,6 +24,9 @@ func NewCirculation(numNodes int) Circulation {
 // AddEdge sets the capacity and demand of the edge in the flow network. An error is returned
 // if either fromID or toID are not valid node IDs. Adding an edge twice has no additional effect.
 func (c *Circulation) AddEdge(fromID, toID int, capacity, demand int64) error {
+	if fromID == Source || fromID == Sink || toID == Source || toID == Sink {
+		return fmt.Errorf("edges to/from the source/sink nodes cannot be used in a Circulation")
+	}
 	if err := c.FlowNetwork.AddEdge(fromID, toID, capacity); err != nil {
 		return err
 	}
