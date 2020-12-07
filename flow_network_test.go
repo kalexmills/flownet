@@ -21,7 +21,7 @@ func TestAllTestData(t *testing.T) {
 		if info.IsDir() {
 			return nil
 		}
-		if !strings.HasSuffix(path, ".dat") {
+		if !strings.HasSuffix(path, ".flow") {
 			return nil
 		}
 		f, err := os.Open(path)
@@ -46,8 +46,8 @@ func runTest(t *testing.T, path string, instance TestInstance) error {
 	}
 	graph.PushRelabel()
 	outflow := graph.Outflow()
-	if instance.expectedFlow == -1 { // run sanity checks
-		if err := flownet.SanityChecks(graph); err != nil {
+	if instance.expectedFlow == -1 { // run sanity checks for any instance we don't know the max-flow value of
+		if err := flownet.SanityCheckFlowNetwork(graph); err != nil {
 			t.Errorf("sanity checks failed: %v", err)
 			return err
 		}
@@ -59,7 +59,7 @@ func runTest(t *testing.T, path string, instance TestInstance) error {
 	return nil
 }
 
-// loadInstance loads a test instance. Each test is a UTF-8 encoded file. Each line of the file consists of
+// loadInstance loads a test instance flow network. Each test is a UTF-8 encoded file. Each line of the file consists of
 // integers separated by a single space character. The first line of the file contains a single integer describing
 // the expected max flow which is attainable for the test instance. All remaining lines of the file are either empty
 // or consist of 3 integers describing one directed edge of the flow network. The first two integers are the source

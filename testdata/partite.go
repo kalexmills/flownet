@@ -1,3 +1,4 @@
+// partite generates multipartite flow networks for testing.
 package main
 
 import (
@@ -13,13 +14,13 @@ import (
 func main() {
 	rand.Seed(time.Now().Unix())
 	for idx, sizes := range [][]int{{10, 10}, {100, 10}, {10, 100}} {
-		writeFile(fmt.Sprintf("bipartite_%d.dat", idx), sizes)
+		writeFile(fmt.Sprintf("bipartite_%d.flow", idx), sizes)
 	}
 	for idx, sizes := range [][]int{{10, 100, 10}, {100, 10, 100}, {10, 10, 10}} {
-		writeFile(fmt.Sprintf("tripartite_%d.dat", idx), sizes)
+		writeFile(fmt.Sprintf("tripartite_%d.flow", idx), sizes)
 	}
 	for idx, sizes := range [][]int{{50, 100, 50, 100, 50, 100}} {
-		writeFile(fmt.Sprintf("multipartite_medium_%d.dat", idx), sizes)
+		writeFile(fmt.Sprintf("multipartite_medium_%d.flow", idx), sizes)
 	}
 }
 
@@ -30,6 +31,7 @@ func writeFile(name string, sizes []int) {
 		log.Fatalln(err)
 	}
 	capacities, expected := makeMultipartite(sizes...)
+	// we only know the max-flow for sure if it's a bipartite graph.
 	if len(sizes) > 2 {
 		expected = -1
 	}
