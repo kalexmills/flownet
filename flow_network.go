@@ -26,8 +26,8 @@ func (e edge) reverse() edge {
 const sourceID = 0
 const sinkID = 1
 
-// NewGraph constructs a new graph, allocating an initial capacity for the provided number of nodes.
-func NewGraph(numNodes int) FlowNetwork {
+// NewFlowNetwork constructs a new graph, allocating an initial capacity for the provided number of nodes.
+func NewFlowNetwork(numNodes int) FlowNetwork {
 	result := FlowNetwork{
 		numNodes: numNodes,
 		capacity: make(map[edge]int64, 2*numNodes), // preallocate assuming avg. node degree = 2
@@ -84,7 +84,7 @@ func (g *FlowNetwork) AddNode() int {
 }
 
 // AddEdge sets the capacity of an edge in the flow network. An error is returned if either fromID or
-// toID are not valid node IDs.
+// toID are not valid node IDs. Adding an edge twice has no additional effect.
 func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
 	if fromID < 0 || fromID >= g.numNodes {
 		return fmt.Errorf("no node with ID %d is known", fromID)

@@ -38,7 +38,7 @@ func TestAllTestData(t *testing.T) {
 }
 
 func runTest(t *testing.T, path string, instance TestInstance) error {
-	graph := flownet.NewGraph(instance.numNodes)
+	graph := flownet.NewFlowNetwork(instance.numNodes)
 	for edge, cap := range instance.capacities {
 		if err := graph.AddEdge(edge.from, edge.to, cap); err != nil {
 			t.Error(err)
