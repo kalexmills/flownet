@@ -3,9 +3,11 @@ package flownet
 import "fmt"
 
 // Circulation is a flow network which additionally requires every edge in the flow network to satisfy
-// a certain amount of demand. Nodes in a circulation are not connected the source or sink as in a
-// traditional flow network. Attempting to add an edge to or from the Source or Sink nodes in a
-// circulation will result in an error.
+// a certain amount of demand.
+// Whereas in a traditional flow network problem we are interested in maximizing the amount of flow
+// from the source to the sink, in a circulation we ask if there is a feasible flow which satisfies
+// the demand.Nodes in a circulation are not connected the source or sink as in a
+// traditional flow network, trying to add these connections to a Circulation will result in an error.
 type Circulation struct {
 	FlowNetwork
 	demand map[edge]int64
@@ -80,4 +82,24 @@ func (c *Circulation) PushRelabel() {
 	c.targetValue = targetValue
 	// find the max-flow in the resulting flow network.
 	c.FlowNetwork.PushRelabel()
+}
+
+// SanityCheckCirculation runs sanity checks against a circulation that has previously had its flow computed.
+func SanityCheckCirculation(c Circulation) error {
+	err := SanityCheckFlowNetwork(c.FlowNetwork)
+	if err != nil {
+		return err
+	}
+	if !c.SatisfiesDemand() {
+		// we have nothing  to check unless demand was satisfied
+		return nil
+	}
+	for edge, flow := range c.FlowNetwork.preflow {
+		if flow > 0 {
+			if flow < c.demand[edge] {
+				return fmt.Errorf("edge from %d to %d has flow %d which is less than demand %d", edge.from, edge.to, flow, c.demand[edge])
+			}
+		}
+	}
+	return nil
 }

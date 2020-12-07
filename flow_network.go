@@ -265,9 +265,9 @@ func min(x, y int) int {
 	return y
 }
 
-// SanityChecks runs several sanity checks against a FlowNetwork that has had previously had its
+// SanityCheckFlowNetwork runs several sanity checks against a FlowNetwork that has had previously had its
 // flow computed.
-func SanityChecks(fn FlowNetwork) error {
+func SanityCheckFlowNetwork(fn FlowNetwork) error {
 	nodeflow := make(map[int]int64) // computes residual flow stored at nodes to ensure inflow == outflow
 	for e, flow := range fn.preflow {
 		if cap, ok := fn.capacity[e]; ok {
