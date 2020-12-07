@@ -1,4 +1,4 @@
-// partite generates multipartite flow networks for testing.
+// partite_flow generates random multipartite flow networks for testing.
 package main
 
 import (
@@ -14,26 +14,33 @@ import (
 func main() {
 	rand.Seed(time.Now().Unix())
 	for idx, sizes := range [][]int{{10, 10}, {100, 10}, {10, 100}} {
-		writeFile(fmt.Sprintf("bipartite_%d.flow", idx), sizes)
+		capacities, expected := makeMultipartite(sizes...)
+		if len(sizes) > 2 {
+			expected = -1
+		}
+		writeFile(fmt.Sprintf("bipartite_%d.flow", idx), capacities, expected)
 	}
 	for idx, sizes := range [][]int{{10, 100, 10}, {100, 10, 100}, {10, 10, 10}} {
-		writeFile(fmt.Sprintf("tripartite_%d.flow", idx), sizes)
+		capacities, expected := makeMultipartite(sizes...)
+		if len(sizes) > 2 {
+			expected = -1
+		}
+		writeFile(fmt.Sprintf("tripartite_%d.flow", idx), capacities, expected)
 	}
 	for idx, sizes := range [][]int{{50, 100, 50, 100, 50, 100}} {
-		writeFile(fmt.Sprintf("multipartite_medium_%d.flow", idx), sizes)
+		capacities, expected := makeMultipartite(sizes...)
+		if len(sizes) > 2 {
+			expected = -1
+		}
+		writeFile(fmt.Sprintf("multipartite_medium_%d.flow", idx), capacities, expected)
 	}
 }
 
-func writeFile(name string, sizes []int) {
+func writeFile(name string, capacities capacities, expected int64) {
 	f, err := os.OpenFile(name, os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0666)
 	defer f.Close()
 	if err != nil {
 		log.Fatalln(err)
-	}
-	capacities, expected := makeMultipartite(sizes...)
-	// we only know the max-flow for sure if it's a bipartite graph.
-	if len(sizes) > 2 {
-		expected = -1
 	}
 	writeOutput(f, capacities, expected)
 }

@@ -294,7 +294,7 @@ func SanityCheckFlowNetwork(fn FlowNetwork) error {
 
 // augmentingPathCheck returns an error if any augmenting path is found in the residual flow network.
 func augmentingPathCheck(fn FlowNetwork) error {
-	// run a from source to sink using the residual flow network, if you find a path, it's wrong.
+	// run a BFS from source to sink using the residual flow network, if you find a path, it's wrong.
 	frontier := []int{sourceID}
 	visited := make(map[int]struct{})
 	for len(frontier) > 0 {

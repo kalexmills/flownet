@@ -46,6 +46,10 @@ func runTest(t *testing.T, path string, instance TestInstance) error {
 	}
 	graph.PushRelabel()
 	outflow := graph.Outflow()
+	t.Logf("test %s reported max flow of %d", path, outflow)
+	if outflow == 0 {
+		t.Errorf("failed test %s, expected non-zero max flow", path)
+	}
 	if instance.expectedFlow == -1 { // run sanity checks for any instance we don't know the max-flow value of
 		if err := flownet.SanityCheckFlowNetwork(graph); err != nil {
 			t.Errorf("sanity checks failed: %v", err)
@@ -55,6 +59,7 @@ func runTest(t *testing.T, path string, instance TestInstance) error {
 	}
 	if instance.expectedFlow != outflow {
 		t.Errorf("failed test %s expected max-flow of %d but was %d", path, instance.expectedFlow, outflow)
+		return nil
 	}
 	return nil
 }
