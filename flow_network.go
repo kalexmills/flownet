@@ -306,7 +306,7 @@ func min(x, y int) int {
 // TopSort returns a topological sort of the nodes in the provided FlowNetwork, starting from the nodes
 // connected to the source, using the provided less function to break any ties found. If the flow network
 // passed is not a DAG, this function may not produce desirable results.
-func TopSort(fn FlowNetwork, less func(int, int) bool) []int {
+func TopSort(fn FlowNetwork, less func(int, int) bool) []int { // TODO: test
 	type frontierRecord struct {
 		nodeID int
 		depth  int
