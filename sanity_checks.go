@@ -2,6 +2,7 @@ package flownet
 
 import "fmt"
 
+// SanityChecks contains sanity check procedures for FlowNetworks, Transshipments, and Circulations.
 var SanityChecks sanityCheckers
 
 type sanityCheckers struct{}
