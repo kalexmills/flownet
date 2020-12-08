@@ -12,8 +12,9 @@ const Source int = -2
 // Sink is the ID of the sink pseudonode.
 const Sink int = -1
 
-// FlowNetwork is a directed graph in which each edge is associated with a capacity. It facilitates
-// running the PushRelabel algorithm.
+// A FlowNetwork is a directed graph which can be used to solve maximum-flow problems. Each edge is
+// associated with a capacity and a flow. The flow on each edge may not exceed the stated capacity.
+// Each node may be connected to a source or a sink node.
 //
 // By default, nodes which do not have any incoming edges are presumed to be connected to the source,
 // while nodes which have no outgoing edges are presumed to be connected to the sink. These default
@@ -73,8 +74,8 @@ func NewFlowNetwork(numNodes int) FlowNetwork {
 	return result
 }
 
-// Outflow returns the amount of flow leaving the network via the sink. This is the solution to the
-// typical max flow problem.
+// Outflow returns the amount of flow which leaves the network via the sink. After PushRelabel has
+// been called, this will be a solution to the max-flow problem.
 func (g FlowNetwork) Outflow() int64 {
 	result := int64(0)
 	for edge, flow := range g.preflow {
@@ -85,23 +86,28 @@ func (g FlowNetwork) Outflow() int64 {
 	return result
 }
 
-// Flow returns the flow along an edge.
+// Flow returns the flow along an edge. Before PushRelabel is called this method returns 0.
 func (g FlowNetwork) Flow(from, to int) int64 {
 	return g.preflow[edge{from + 2, to + 2}]
 }
 
-// Residual returns the residual flow along an edge.
+// Residual returns the residual flow along an edge, defined as capacity - flow.
 func (g FlowNetwork) Residual(from, to int) int64 {
-	e := edge{from + 2, to + 2}
-	return g.residual(e)
+	return g.residual(edge{from + 2, to + 2})
 }
 
-// residual returns the same result as Residual, but could be cheaper for internal use
+// Capacity returns the capacity of the provided edge.
+func (g FlowNetwork) Capacity(from, to int) int64 {
+	return g.capacity[edge{from + 2, to + 2}]
+}
+
+// residual returns the same result as Residual, but could be cheaper for internal use.
 func (g FlowNetwork) residual(e edge) int64 {
 	return g.capacity[e] - g.preflow[e]
 }
 
-// AddNode adds a new node to the graph and returns its ID.
+// AddNode adds a new node to the graph and returns its ID, which must be used in subsequent
+// calls.
 func (g *FlowNetwork) AddNode() int {
 	id := g.numNodes
 	g.numNodes++
@@ -112,9 +118,9 @@ func (g *FlowNetwork) AddNode() int {
 	return id - 2
 }
 
-// AddEdge sets the capacity of an edge in the flow network. An error is returned if either fromID or
-// toID are not valid node IDs. Adding an edge twice has no additional effect. Attempting to
-// use flownet.Source as toId or flownet.Sink as fromID yields an error.
+// AddEdge sets the capacity of an edge in the flow network. Adding an edge twice has no additional effect.
+// Attempting to use flownet.Source as toId or flownet.Sink as fromID yields an error. An error is returned
+// if either fromID or toID are not valid node IDs.
 func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
 	if fromID < -2 || fromID >= g.numNodes {
 		return fmt.Errorf("no node with ID %d is known", fromID)
@@ -149,8 +155,8 @@ func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
 }
 
 // SetNodeOrder sets the order in which nodes are visited by the PushRelabel algorithm. As long as all of
-// the nodeIDs are conatined in provided array, the PushRelabel algorithm will work properly. If some nodeID
-// is missing, an error is returned and the order remains unchanged.
+// the nodeIDs are conatined in the provided array, the PushRelabel algorithm will work properly. If some
+// nodeID is missing, an error is returned and the order will remain unchanged.
 func (g *FlowNetwork) SetNodeOrder(nodeIDs []int) error {
 	if len(nodeIDs) != g.numNodes {
 		return fmt.Errorf("not enough nodeIDs; expected %d of them", g.numNodes)
@@ -303,10 +309,10 @@ func min(x, y int) int {
 	return y
 }
 
-// TopSort returns a topological sort of the nodes in the provided FlowNetwork, starting from the nodes
-// connected to the source, using the provided less function to break any ties found. If the flow network
-// passed is not a DAG, this function may not produce desirable results.
-func TopSort(fn FlowNetwork, less func(int, int) bool) []int { // TODO: test
+// TopSort returns a topological ordering of the nodes in the provided FlowNetwork, starting from the
+// nodesconnected to the source, using the provided less function to break any ties that are found. If the
+// flow network passed in is not a DAG, this function may not produce desirable results.
+func TopSort(fn FlowNetwork, less func(int, int) bool) []int {
 	type frontierRecord struct {
 		nodeID int
 		depth  int
@@ -317,10 +323,10 @@ func TopSort(fn FlowNetwork, less func(int, int) bool) []int { // TODO: test
 	currDepth := 0                              // the current being searched
 	nodesAtDepth := make([]int, 0, fn.numNodes) // all nodeIDs seen at depth currDepth so far.
 	for len(frontier) > 0 {
+		// pull curr off the frontier and visit it
 		curr := frontier[0]
 		frontier := frontier[1:]
 		visited[curr.nodeID] = struct{}{}
-		// visit curr
 		if curr.nodeID != Source && curr.nodeID != Sink {
 			// this relies on the property of BFS that all nodes at the same depth are visited before nodes
 			// at the next depth. We store all the nodes at the same depth in a bucket and sort them once
@@ -345,52 +351,4 @@ func TopSort(fn FlowNetwork, less func(int, int) bool) []int { // TODO: test
 		}
 	}
 	return result
-}
-
-// SanityCheckFlowNetwork runs several sanity checks against a FlowNetwork that has had previously had its
-// flow computed.
-func SanityCheckFlowNetwork(fn FlowNetwork) error {
-	nodeflow := make(map[int]int64) // computes residual flow stored at nodes to ensure inflow == outflow
-	for e, flow := range fn.preflow {
-		if cap, ok := fn.capacity[e]; ok {
-			if flow > cap {
-				return fmt.Errorf("capacity of %d on edge from %d to %d exceeded by flow %d", cap, e.from, e.to, flow)
-			}
-			nodeflow[e.from] -= flow
-			nodeflow[e.to] += flow
-		} else {
-			if _, ok := fn.capacity[edge{e.to, e.from}]; flow > 0 || (flow < 0 && !ok) {
-				return fmt.Errorf("flow of %d reported on edge from %d to %d, but found no capacity record for that edge", flow, e.from, e.to)
-			}
-		}
-	}
-	// ensure inflow == outflow; nodeflow should be zero for every node other than source and sink.
-	for node, flowDiff := range nodeflow {
-		if node != sourceID && node != sinkID && flowDiff != 0 {
-			return fmt.Errorf("node %d does not have its inflow equal to its outflow", node)
-		}
-	}
-	// attempt to find an augmenting path in the graph, return an error if one is found.
-	return augmentingPathCheck(fn)
-}
-
-// augmentingPathCheck returns an error if any augmenting path is found in the residual flow network.
-func augmentingPathCheck(fn FlowNetwork) error {
-	// run a BFS from source to sink using the residual flow network, if you find a path, it's wrong.
-	frontier := []int{sourceID}
-	visited := make(map[int]struct{})
-	for len(frontier) > 0 {
-		curr := frontier[0]
-		frontier = frontier[1:]
-		visited[curr] = struct{}{}
-		for i := 0; i < fn.numNodes+2; i++ {
-			if _, ok := visited[i]; !ok && fn.residual(edge{curr, i}) > 0 {
-				if i == sinkID {
-					return fmt.Errorf("found an augmenting path from source to sink via edge %d; flow is not maximum", curr)
-				}
-				frontier = append(frontier, i)
-			}
-		}
-	}
-	return nil
 }

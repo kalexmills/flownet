@@ -1,8 +1,9 @@
+// Package flownet provides algorithms for solving optimization problems on a flow network.
 package flownet
 
 import "fmt"
 
-// Circulation is a flow network which additionally requires every edge in the flow network to satisfy
+// A Circulation is a flow network which additionally requires every edge in the flow network to satisfy
 // a certain amount of demand.
 // Whereas in a traditional flow network problem we are interested in maximizing the amount of flow
 // from the source to the sink, in a circulation we ask if there is a feasible flow which satisfies
@@ -29,11 +30,11 @@ func (c *Circulation) AddEdge(fromID, toID int, capacity, demand int64) error {
 	if fromID == Source || fromID == Sink || toID == Source || toID == Sink {
 		return fmt.Errorf("edges to/from the source/sink nodes cannot be used in a Circulation")
 	}
-	if err := c.FlowNetwork.AddEdge(fromID, toID, capacity); err != nil {
-		return err
-	}
 	if capacity < demand {
 		return fmt.Errorf("capacity cannot be smaller than demand; capacity = %d, demand = %d", capacity, demand)
+	}
+	if err := c.FlowNetwork.AddEdge(fromID, toID, capacity); err != nil {
+		return err
 	}
 	c.demand[edge{fromID + 2, toID + 2}] = demand
 	return nil
@@ -62,7 +63,7 @@ func (c *Circulation) PushRelabel() {
 		}
 	}
 	// compute the excess demand at each node
-	excessDemand := make([]int64, c.FlowNetwork.numNodes)
+	excessDemand := make([]int64, c.FlowNetwork.numNodes+2)
 	for edge, demand := range c.demand {
 		c.FlowNetwork.capacity[edge] -= demand
 		excessDemand[edge.from] -= demand
@@ -82,24 +83,4 @@ func (c *Circulation) PushRelabel() {
 	c.targetValue = targetValue
 	// find the max-flow in the resulting flow network.
 	c.FlowNetwork.PushRelabel()
-}
-
-// SanityCheckCirculation runs sanity checks against a circulation that has previously had its flow computed.
-func SanityCheckCirculation(c Circulation) error {
-	err := SanityCheckFlowNetwork(c.FlowNetwork)
-	if err != nil {
-		return err
-	}
-	if !c.SatisfiesDemand() {
-		// we have nothing  to check unless demand was satisfied
-		return nil
-	}
-	for edge, flow := range c.FlowNetwork.preflow {
-		if flow > 0 {
-			if flow < c.demand[edge] {
-				return fmt.Errorf("edge from %d to %d has flow %d which is less than demand %d", edge.from, edge.to, flow, c.demand[edge])
-			}
-		}
-	}
-	return nil
 }

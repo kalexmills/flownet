@@ -2,7 +2,7 @@ package flownet
 
 import "fmt"
 
-// Transshipment is a circulation which does not require that the amount of flow entering a node
+// A Transshipment is a circulation which does not require that the amount of flow entering a node
 // remains strictly equal to the amount of flow exiting a node. In a transshipment, some of the
 // flow is allowed to stay pooled up in the node. Each node also has a capacity and a demand. By
 // default, every node has zero capacity and demand.
@@ -10,6 +10,10 @@ type Transshipment struct {
 	Circulation
 	bounds      map[int]bounds
 	specialNode int // a special node used to model node demand/capacity
+}
+
+type bounds struct {
+	capacity, demand int64
 }
 
 // NewTransshipment constructs a new graph, allocating enough capacity for the provided number of nodes.
@@ -50,30 +54,4 @@ func (t *Transshipment) PushRelabel() {
 		t.Circulation.AddEdge(nodeID, t.specialNode, bounds.capacity, bounds.demand)
 	}
 	t.Circulation.PushRelabel()
-}
-
-type bounds struct {
-	capacity, demand int64
-}
-
-// SanityCheckTransshipment runs sanity checks and reports them as appropriate for a Transshipment.
-func SanityCheckTransshipment(t Transshipment) error {
-	err := SanityCheckFlowNetwork(t.FlowNetwork)
-	if err != nil {
-		return err
-	}
-	for nodeID, bounds := range t.bounds {
-		if bounds.capacity < t.NodeFlow(nodeID) {
-			return fmt.Errorf("node %d has stored flow of %d which exceeds its capacity bound of %d", nodeID, t.NodeFlow(nodeID), bounds.capacity)
-		}
-	}
-	if !t.SatisfiesDemand() {
-		return nil
-	}
-	for nodeID, bounds := range t.bounds {
-		if t.NodeFlow(nodeID) < bounds.demand {
-			return fmt.Errorf("node %d has stored flow of %d which does not meet or exceed its demand of %d", nodeID, t.NodeFlow(nodeID), bounds.demand)
-		}
-	}
-	return SanityCheckCirculation(t.Circulation)
 }
