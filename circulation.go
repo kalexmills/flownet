@@ -3,12 +3,12 @@ package flownet
 
 import "fmt"
 
-// A Circulation is a flow network which additionally requires every edge in the flow network to satisfy
-// a certain amount of demand.
+// A Circulation is a flow network which additionally requires every edge in the flow network to carry
+// a minimum amount of flow called its demand.
 // Whereas in a traditional flow network problem we are interested in maximizing the amount of flow
 // from the source to the sink, in a circulation we ask if there is a feasible flow which satisfies
 // the demand. Nodes in a circulation are not connected the source or sink as in a traditional flow
-// network, trying to add these connections to a Circulation will result in an error.
+// network. Trying to add these connections to a Circulation will cause an error.
 type Circulation struct {
 	FlowNetwork
 	demand map[edge]int64

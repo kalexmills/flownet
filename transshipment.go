@@ -4,8 +4,8 @@ import "fmt"
 
 // A Transshipment is a circulation which does not require that the amount of flow entering a node
 // remains strictly equal to the amount of flow exiting a node. In a transshipment, some of the
-// flow is allowed to stay pooled up in the node. Each node also has a capacity and a demand. By
-// default, every node has zero capacity and demand.
+// flow is allowed to remain in the node without flowing out. Each node also has a capacity and a
+// demand. Every node in a Transshipment has zero capacity and demand until SetNodeBounds is called.
 type Transshipment struct {
 	Circulation
 	bounds      map[int]bounds
@@ -45,8 +45,8 @@ func (t *Transshipment) NodeFlow(nodeID int) int64 {
 
 // PushRelabel finds a valid transshipment (if one exists) via the push-relabel algorithm.
 func (t *Transshipment) PushRelabel() {
-	// N.B. a transshipment can be obtained from a circulation by cheating. We add fake edges
-	// that store any flow that ends up being 'stored' at the nodes.
+	// N.B. a transshipment can be obtained from a circulation by adding fake edges
+	// to a new node that can store any flow that ends up being 'stored' at the nodes.
 	if t.specialNode == -1 {
 		t.specialNode = t.Circulation.AddNode()
 	}

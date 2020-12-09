@@ -3,14 +3,15 @@ package flownet
 import "fmt"
 
 // SanityChecks contains sanity check procedures for FlowNetworks, Transshipments, and Circulations.
-var SanityChecks sanityCheckers
+var SanityChecks SanityCheckers
 
-type sanityCheckers struct{}
+// SanityCheckers holds sanity check procedures for flownet types.
+type SanityCheckers struct{}
 
 // FlowNetwork runs several sanity checks against a FlowNetwork that has had previously had its
 // flow computed. If flowEquality is true, the inflow of each node is checked to ensure it is equal
 // to the outflow.
-func (sc sanityCheckers) FlowNetwork(fn FlowNetwork, flowEquality bool) error {
+func (sc SanityCheckers) FlowNetwork(fn FlowNetwork, flowEquality bool) error {
 	nodeflow := make(map[int]int64) // computes residual flow stored at nodes to ensure inflow == outflow
 	for e, flow := range fn.preflow {
 		if cap, ok := fn.capacity[e]; ok {
@@ -38,7 +39,7 @@ func (sc sanityCheckers) FlowNetwork(fn FlowNetwork, flowEquality bool) error {
 }
 
 // augmentingPathCheck returns an error if any augmenting path is found in the residual flow network.
-func (sanityCheckers) augmentingPathCheck(fn FlowNetwork) error {
+func (SanityCheckers) augmentingPathCheck(fn FlowNetwork) error {
 	// run a BFS from source to sink using the residual flow network, if you find a path, it's wrong.
 	frontier := []int{sourceID}
 	visited := make(map[int]struct{})
@@ -60,7 +61,7 @@ func (sanityCheckers) augmentingPathCheck(fn FlowNetwork) error {
 
 // Circulation runs sanity checks against a circulation that has previously had its flow computed. These
 // sanity checks include the FlowNetwork checks; they do not need to be run separately.
-func (sc sanityCheckers) Circulation(c Circulation) error {
+func (sc SanityCheckers) Circulation(c Circulation) error {
 	err := sc.FlowNetwork(c.FlowNetwork, true)
 	if err != nil {
 		return err
@@ -81,7 +82,7 @@ func (sc sanityCheckers) Circulation(c Circulation) error {
 
 // Transshipment runs sanity checks and reports them as appropriate for a Transshipment. These sanity
 // checks include the Circulation and FlowNetwork checks; they do not need to be run separately.
-func (sc sanityCheckers) Transshipment(t Transshipment) error {
+func (sc SanityCheckers) Transshipment(t Transshipment) error {
 	err := sc.FlowNetwork(t.FlowNetwork, false)
 	if err != nil {
 		return err
