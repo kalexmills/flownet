@@ -1,9 +1,9 @@
 package flownet
 
 import (
+	"container/heap"
 	"fmt"
 	"math"
-	"sort"
 )
 
 // Source is the ID of the source pseudonode.
@@ -27,6 +27,8 @@ type FlowNetwork struct {
 	numNodes int
 	// nodeOrder contains the order in which nodes are discharged.
 	nodeOrder []int
+	// adjacencyList is a map from source nodes to a set of destination nodes in no particular order.
+	adjacencyList map[int]map[int]struct{}
 	// capacity contains a map from each edge to its capacity.
 	capacity map[edge]int64
 	// preflow contains a map from each edge to its flow value.
@@ -59,15 +61,22 @@ const sinkID = 1
 // NewFlowNetwork constructs a new graph, preallocating enough memory for the provided number of nodes.
 func NewFlowNetwork(numNodes int) FlowNetwork {
 	result := FlowNetwork{
-		numNodes: numNodes,
-		capacity: make(map[edge]int64, 2*numNodes), // preallocate assuming avg. node degree = 2
-		preflow:  make(map[edge]int64, 2*numNodes),
-		excess:   make([]int64, numNodes+2),
-		label:    make([]int, numNodes+2),
-		seen:     make([]int, numNodes+2),
+		numNodes:      numNodes,
+		adjacencyList: make(map[int]map[int]struct{}, numNodes+2),
+		capacity:      make(map[edge]int64, 2*numNodes), // preallocate assuming avg. node degree = 2
+		preflow:       make(map[edge]int64, 2*numNodes),
+		excess:        make([]int64, numNodes+2),
+		label:         make([]int, numNodes+2),
+		seen:          make([]int, numNodes+2),
 	}
+	result.adjacencyList[sourceID] = make(map[int]struct{})
 	// all nodes begin their life connected to the source and sink nodes
 	for i := 0; i < numNodes; i++ {
+		result.adjacencyList[i+2] = make(map[int]struct{})
+
+		result.adjacencyList[sourceID][i+2] = struct{}{}
+		result.adjacencyList[i+2][sinkID] = struct{}{}
+
 		result.capacity[edge{sourceID, i + 2}] = math.MaxInt64
 		result.capacity[edge{i + 2, sinkID}] = math.MaxInt64
 	}
@@ -113,8 +122,14 @@ func (g *FlowNetwork) AddNode() int {
 	g.numNodes++
 	g.excess = append(g.excess, 0)
 	g.label = append(g.label, 0)
-	g.capacity[edge{sourceID, id + 2}] = math.MaxInt64
-	g.capacity[edge{id + 2, sinkID}] = math.MaxInt64
+	if !g.manualSource {
+		g.capacity[edge{sourceID, id + 2}] = math.MaxInt64
+		g.adjacencyList[sourceID][id+2] = struct{}{}
+	}
+	if !g.manualSink {
+		g.capacity[edge{id + 2, sinkID}] = math.MaxInt64
+		g.adjacencyList[id+2][sinkID] = struct{}{}
+	}
 	return id - 2
 }
 
@@ -143,13 +158,16 @@ func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
 
 	// actually set the capacity! woo! (finally)
 	g.capacity[edge{fromID + 2, toID + 2}] = capacity
+	g.adjacencyList[fromID+2][toID+2] = struct{}{}
 
 	// auto-remove any connections from/to the source/sink pseudonodes (if they're managed automatically)
 	if !g.manualSource {
 		delete(g.capacity, edge{sourceID, toID + 2})
+		delete(g.adjacencyList[sourceID], toID+2)
 	}
 	if !g.manualSink {
 		delete(g.capacity, edge{fromID + 2, sinkID})
+		delete(g.adjacencyList[fromID+2], sinkID)
 	}
 	return nil
 }
@@ -265,7 +283,7 @@ func (g *FlowNetwork) reset() {
 	}
 	// saturate all outgoing edges from source by setting their excess as high as possible.
 	// N.B. if the sum of the max capacity of edges leaving source exceeds math.MaxInt64, this step will
-	// break and arbitrary precision arithmetic will need to be used.
+	// break under test and arbitrary precision arithmetic will need to be used.
 	g.excess[sourceID] = math.MaxInt64
 	g.push(edge{sourceID, sinkID})
 	for i := 0; i < g.numNodes; i++ {
@@ -295,6 +313,68 @@ func (g *FlowNetwork) enableManualSink() {
 	}
 }
 
+// TopSort returns a topological ordering of the nodes in the provided FlowNetwork, starting from the
+// nodes connected to the source, using the provided less function to break any ties that are found.
+// if the flow network is not a DAG (which is allowed) this function reports an error.
+func TopSort(fn FlowNetwork, less func(int, int) bool) ([]int, error) {
+	unvisitedEdges := make(map[int]map[int]struct{}) // map from nodeIDs to their set of incoming nodes
+	for edge, capacity := range fn.capacity {
+		if capacity <= 0 {
+			continue
+		}
+		if _, ok := unvisitedEdges[edge.to]; !ok {
+			unvisitedEdges[edge.to] = make(map[int]struct{})
+		}
+		unvisitedEdges[edge.to][edge.from] = struct{}{}
+	}
+	roots := &nodeHeap{ // stores all nodes with no incoming edge, sorted in order of less
+		nodeIDs: []int{sourceID},
+		less:    less,
+	}
+	heap.Init(roots)
+	result := make([]int, 0, fn.numNodes)
+	for roots.Len() > 0 {
+		next := roots.Pop().(int)
+		if next != sourceID && next != sinkID {
+			result = append(result, next-2)
+		}
+		for neighbor := range fn.adjacencyList[next] {
+			delete(unvisitedEdges[neighbor], next)
+			if len(unvisitedEdges[neighbor]) == 0 {
+				heap.Push(roots, neighbor)
+			}
+		}
+	}
+	leftoverEdges := 0
+	for _, edges := range unvisitedEdges {
+		leftoverEdges += len(edges)
+	}
+	if leftoverEdges > 0 {
+		return nil, fmt.Errorf("graph has a cycle")
+	}
+	return result, nil
+}
+
+// nodeHeap stores a heap of nodeIDs sorted by the provided less function.
+type nodeHeap struct {
+	nodeIDs []int
+	less    func(int, int) bool
+}
+
+func (h nodeHeap) Len() int           { return len(h.nodeIDs) }
+func (h nodeHeap) Less(i, j int) bool { return h.less(h.nodeIDs[i], h.nodeIDs[j]) }
+func (h nodeHeap) Swap(i, j int)      { h.nodeIDs[i], h.nodeIDs[j] = h.nodeIDs[j], h.nodeIDs[i] }
+
+func (h *nodeHeap) Push(x interface{}) {
+	h.nodeIDs = append(h.nodeIDs, x.(int))
+}
+
+func (h *nodeHeap) Pop() interface{} {
+	x := h.nodeIDs[len(h.nodeIDs)-1]
+	h.nodeIDs = h.nodeIDs[0 : len(h.nodeIDs)-1]
+	return x
+}
+
 func min64(x, y int64) int64 {
 	if x < y {
 		return x
@@ -307,48 +387,4 @@ func min(x, y int) int {
 		return x
 	}
 	return y
-}
-
-// TopSort returns a topological ordering of the nodes in the provided FlowNetwork, starting from the
-// nodesconnected to the source, using the provided less function to break any ties that are found. If the
-// flow network passed in is not a DAG, this function may not produce desirable results.
-func TopSort(fn FlowNetwork, less func(int, int) bool) []int {
-	type frontierRecord struct {
-		nodeID int
-		depth  int
-	}
-	frontier := []frontierRecord{{sourceID, 0}} // BFS search frontier
-	visited := make(map[int]struct{})           // set of visited node IDs.
-	result := make([]int, 0, fn.numNodes)       // result to return
-	currDepth := 0                              // the current being searched
-	nodesAtDepth := make([]int, 0, fn.numNodes) // all nodeIDs seen at depth currDepth so far.
-	for len(frontier) > 0 {
-		// pull curr off the frontier and visit it
-		curr := frontier[0]
-		frontier := frontier[1:]
-		visited[curr.nodeID] = struct{}{}
-		if curr.nodeID != Source && curr.nodeID != Sink {
-			// this relies on the property of BFS that all nodes at the same depth are visited before nodes
-			// at the next depth. We store all the nodes at the same depth in a bucket and sort them once
-			// we see a node with a different depth.
-			if curr.depth == currDepth {
-				nodesAtDepth = append(nodesAtDepth, curr.depth)
-			} else {
-				// starting a new depth, so sort all the nodes at the same depth and commit them to the result.
-				currDepth = curr.depth
-				sort.SliceStable(nodesAtDepth, func(i, j int) bool {
-					return less(nodesAtDepth[i], nodesAtDepth[j])
-				})
-				result = append(result, nodesAtDepth...)
-				nodesAtDepth = nodesAtDepth[len(nodesAtDepth)-1:]
-			}
-		}
-		// add neighbors of curr to the search frontier.
-		for i := 0; i < fn.numNodes+1; i++ {
-			if _, ok := visited[i]; !ok && fn.capacity[edge{curr.nodeID, i}] > 0 {
-				frontier = append(frontier, frontierRecord{i, curr.depth + 1})
-			}
-		}
-	}
-	return result
 }

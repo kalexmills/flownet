@@ -29,6 +29,7 @@ func visitAllInstances(t *testing.T, visit func(*testing.T, string, TestInstance
 		}
 		instance, err := loadInstance(f)
 		if err != nil {
+			t.Fatalf("could not load instance %s: %v", path, err)
 			return err
 		}
 		return visit(t, strings.Replace(path, "testdata/", "", 1), instance)
