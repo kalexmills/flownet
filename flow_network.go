@@ -122,15 +122,19 @@ func (g *FlowNetwork) AddNode() int {
 	g.numNodes++
 	g.excess = append(g.excess, 0)
 	g.label = append(g.label, 0)
+	g.seen = append(g.seen, 0)
 	if !g.manualSource {
 		g.capacity[edge{sourceID, id + 2}] = math.MaxInt64
 		g.adjacencyList[sourceID][id+2] = struct{}{}
 	}
 	if !g.manualSink {
 		g.capacity[edge{id + 2, sinkID}] = math.MaxInt64
+		if _, ok := g.adjacencyList[id+2]; !ok {
+			g.adjacencyList[id+2] = make(map[int]struct{})
+		}
 		g.adjacencyList[id+2][sinkID] = struct{}{}
 	}
-	return id - 2
+	return id
 }
 
 // AddEdge sets the capacity of an edge in the flow network. Adding an edge twice has no additional effect.
