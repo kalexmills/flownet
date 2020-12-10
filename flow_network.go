@@ -87,7 +87,7 @@ func NewFlowNetwork(numNodes int) FlowNetwork {
 // been called, this will be a solution to the max-flow problem.
 func (g FlowNetwork) Outflow() int64 {
 	result := int64(0)
-	for edge, flow := range g.preflow {
+	for edge, flow := range g.preflow { // TODO: optimize via caching
 		if edge.to == sinkID {
 			result += flow
 		}
@@ -176,9 +176,10 @@ func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
 	return nil
 }
 
-// SetNodeOrder sets the order in which nodes are visited by the PushRelabel algorithm. As long as all of
-// the nodeIDs are conatined in the provided array, the PushRelabel algorithm will work properly. If some
-// nodeID is missing, an error is returned and the order will remain unchanged.
+// SetNodeOrder sets the order in which nodes are visited by the PushRelabel algorithm. By default, nodes
+// are first visited in order of ID, then in descending order of label. As long as all of the nodeIDs are
+// contained in the provided array, the PushRelabel algorithm will work properly. If some nodeID is missing, an error is returned and the order
+// will remain unchanged. If any node is added after SetNodeOrder is called, the node order will reset to the default.
 func (g *FlowNetwork) SetNodeOrder(nodeIDs []int) error {
 	if len(nodeIDs) != g.numNodes {
 		return fmt.Errorf("not enough nodeIDs; expected %d of them", g.numNodes)
@@ -233,10 +234,10 @@ func (g *FlowNetwork) push(e edge) {
 	g.excess[e.to] += delta
 }
 
-// relabel increases the label of an empty node to the minimum of its neighbors
+// relabel increases the label of an node with no excess to the minimum of its neighbors
 func (g *FlowNetwork) relabel(nodeID int) {
 	minHeight := math.MaxInt64
-	for i := 0; i < g.numNodes+2; i++ {
+	for i := 0; i < g.numNodes+2; i++ { // TODO: use the adjacency list here (when I tried; I got an infinite loop :T)
 		if g.residual(edge{nodeID, i}) > 0 {
 			minHeight = min(minHeight, g.label[i])
 			g.label[nodeID] = minHeight + 1
@@ -244,7 +245,7 @@ func (g *FlowNetwork) relabel(nodeID int) {
 	}
 }
 
-// discharge pushes as much excess from nodeID to its unvisited neighbors as possible.
+// discharge pushes as much excess from nodeID to its unseen neighbors as possible.
 func (g *FlowNetwork) discharge(nodeID int) {
 	for g.excess[nodeID] > 0 {
 		if g.seen[nodeID] < g.numNodes+2 {
@@ -279,8 +280,11 @@ func (g *FlowNetwork) reset() {
 			continue
 		}
 		outgoingCapacity := int64(0)
-		for v := 0; v < g.numNodes; v++ {
-			outgoingCapacity += g.capacity[edge{u + 2, v + 2}]
+		for v := range g.adjacencyList[u+2] {
+			if v == sinkID || v == sourceID {
+				continue
+			}
+			outgoingCapacity += g.capacity[edge{u + 2, v}]
 		}
 		g.capacity[edge{sourceID, u + 2}] = outgoingCapacity
 		totalCapacity += outgoingCapacity
@@ -303,6 +307,7 @@ func (g *FlowNetwork) enableManualSource() {
 	// disconnect all nodes from source/sink; programmer wants to do it themselves.
 	for i := 2; i < g.numNodes+2; i++ {
 		delete(g.capacity, edge{sourceID, i})
+		delete(g.adjacencyList[sourceID], i)
 	}
 }
 
@@ -314,6 +319,7 @@ func (g *FlowNetwork) enableManualSink() {
 	// disconnect all nodes from source/sink; programmer wants to do it themselves.
 	for i := 2; i < g.numNodes+2; i++ {
 		delete(g.capacity, edge{i, sinkID})
+		delete(g.adjacencyList[i], sinkID)
 	}
 }
 

@@ -3,7 +3,7 @@ package flownet
 import "fmt"
 
 // A Transshipment is a circulation which does not require that the amount of flow entering a node
-// remains strictly equal to the amount of flow exiting a node. In a transshipment, some of the
+// remains strictly equal to the amount of flow exiting a node. In other words, some of the
 // flow is allowed to remain in the node without flowing out. Each node also has a capacity and a
 // demand. Every node in a Transshipment has zero capacity and demand until SetNodeBounds is called.
 type Transshipment struct {
