@@ -179,10 +179,14 @@ func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
 	return nil
 }
 
-// SetNodeOrder sets the order in which nodes are visited by the PushRelabel algorithm. By default, nodes
+// SetNodeOrder sets the order in which nodes are initially visited by the PushRelabel algorithm. By default, nodes
 // are first visited in order of ID, then in descending order of label. As long as all of the nodeIDs are
-// contained in the provided array, the PushRelabel algorithm will work properly. If some nodeID is missing, an error is returned and the order
-// will remain unchanged. If any node is added after SetNodeOrder is called, the node order will reset to the default.
+// contained in the provided array, the PushRelabel algorithm will work properly. If some nodeID is missing, an error
+// is returned and the order will remain unchanged. If any node is added after SetNodeOrder is called, the node order
+// will reset to the default.
+//
+// The node order set here only affects the initial node ordering for the purposes of the push-relabel
+// algorithm. Any relabeling that occurs during the algorithm may alter this order in unintuitive ways.
 func (g *FlowNetwork) SetNodeOrder(nodeIDs []int) error {
 	if len(nodeIDs) != g.numNodes {
 		return fmt.Errorf("wrong number of nodeIDs; expected exactly %d of them", g.numNodes)
@@ -204,7 +208,10 @@ func (g *FlowNetwork) SetNodeOrder(nodeIDs []int) error {
 	return nil
 }
 
-// PushRelabel finds a maximum flow via the push-relabel algorithm.
+// PushRelabel finds a maximum flow via the relabel-to-front variant of the push-relabel algorithm. More
+// specifically, PushRelabel visits each node in the network in the node order and attempts to discharges
+// excess flow from the node. This may update the node's label. When a node's label changes as a result of
+// the algorithm, it is moved to the front of the node order, and all nodes are visited once more.
 func (g *FlowNetwork) PushRelabel() {
 	g.reset()
 	if len(g.nodeOrder) != g.numNodes {
@@ -229,7 +236,8 @@ func (g *FlowNetwork) PushRelabel() {
 	}
 }
 
-// push moves all excess flow across the provided edge
+// push moves as much excess flow across the provided edge as possible without violating the edge's capacity
+// constraint.
 func (g *FlowNetwork) push(e edge) {
 	delta := min64(g.excess[e.from], g.residual(e))
 	g.preflow[e] += delta
@@ -238,7 +246,7 @@ func (g *FlowNetwork) push(e edge) {
 	g.excess[e.to] += delta
 }
 
-// relabel increases the label of an node with no excess to the minimum of its neighbors
+// relabel increases the label of an node with no excess to one larger than the minimum of its neighbors.
 func (g *FlowNetwork) relabel(nodeID int) {
 	minHeight := math.MaxInt64
 	for i := 0; i < g.numNodes+2; i++ { // TODO: use the adjacency list here (when I tried; I got an infinite loop :T)
@@ -258,7 +266,7 @@ func (g *FlowNetwork) discharge(nodeID int) {
 			if g.residual(e) > 0 && g.label[nodeID] > g.label[v] {
 				g.push(e)
 			} else {
-				g.seen[nodeID]++
+				g.seen[nodeID]++ // TODO: 'seen' needs to index the outgoing edges of a node.
 			}
 		} else {
 			g.relabel(nodeID)
