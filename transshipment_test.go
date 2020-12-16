@@ -18,7 +18,7 @@ func TestSanityCheckAllTransshipments(t *testing.T) {
 			}
 		}
 		for i := 0; i < instance.numNodes; i++ {
-			graph.SetNodeBounds(i, 1, 1)
+			graph.SetNodeBounds(i, 0, 3)
 		}
 		graph.PushRelabel()
 		outflow := graph.Outflow()

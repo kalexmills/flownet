@@ -10,8 +10,9 @@ import (
 //       whenever we add a new constraint, we connect the old source/sink to one another with an infinite capacity edge
 //       then we use the new source/sink to enforce the new constraints.
 
-// A Circulation is a flow network which additionally requires every edge in the flow network to carry
-// a minimum amount of flow called its demand.
+// A Circulation is a flow network which has an additional demand associated with each of its nodes
+// or edges. Flow may be supplied to the network via negative node demands.
+//
 // Whereas in a traditional flow network problem we are interested in maximizing the amount of flow
 // from the source to the sink, in a circulation we ask if there is a feasible flow which satisfies
 // the demand. Nodes in a circulation are not connected the source or sink as in a traditional flow
@@ -83,7 +84,12 @@ func (c *Circulation) AddEdge(fromID, toID int, capacity, demand int64) error {
 
 	c.capacity[e] = capacity - demand
 
-	c.demand[e] = demand
+	if demand != 0 {
+		c.demand[e] = demand
+	}
+	if demand == 0 {
+		delete(c.demand, e)
+	}
 	return nil
 }
 

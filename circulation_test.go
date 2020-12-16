@@ -9,11 +9,18 @@ import (
 func TestSanityCheckAllCirculations(t *testing.T) {
 	visitAllInstances(t, func(t *testing.T, path string, instance TestInstance) error {
 		graph := flownet.NewCirculation(instance.numNodes)
+
 		for edge, cap := range instance.capacities {
-			if edge.from < 0 || edge.to < 0 {
+			if edge.from == flownet.Source+2 {
+				graph.SetNodeDemand(edge.to-2, -10)
+			}
+			if edge.to == flownet.Sink+2 {
+				graph.SetNodeDemand(edge.from-2, 10)
+			}
+			if edge.from < 2 || edge.to < 2 {
 				continue
 			}
-			if err := graph.AddEdge(edge.from, edge.to, cap, 1); err != nil {
+			if err := graph.AddEdge(edge.from-2, edge.to-2, cap, 1); err != nil {
 				t.Error(err)
 			}
 		}

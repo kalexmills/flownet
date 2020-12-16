@@ -26,7 +26,7 @@ func (sc SanityCheckers) FlowNetwork(fn FlowNetwork, flowEquality bool) error {
 			}
 		}
 	}
-	// ensure inflow == outflow; nodeflow should be zero for every node other than source and sink.
+	// ensure inflow == outflow; node flow should be zero for every node other than source and sink.
 	if flowEquality {
 		for node, flowDiff := range nodeflow {
 			if node != sourceID && node != sinkID && flowDiff != 0 {
@@ -91,16 +91,16 @@ func (sc SanityCheckers) Transshipment(t Transshipment) error {
 		return err
 	}
 	for nodeID, bounds := range t.bounds {
-		if bounds.capacity < t.NodeFlow(nodeID) {
-			return fmt.Errorf("node %d has stored flow of %d which exceeds its capacity bound of %d", nodeID, t.NodeFlow(nodeID), bounds.capacity)
+		if bounds.storageMax < t.NodeFlow(nodeID) {
+			return fmt.Errorf("node %d has stored flow of %d which exceeds its capacity bound of %d", nodeID, t.NodeFlow(nodeID), bounds.storageMax)
 		}
 	}
 	if !t.SatisfiesDemand() {
 		return nil
 	}
 	for nodeID, bounds := range t.bounds {
-		if t.NodeFlow(nodeID) < bounds.demand {
-			return fmt.Errorf("node %d has stored flow of %d which does not meet or exceed its demand of %d", nodeID, t.NodeFlow(nodeID), bounds.demand)
+		if t.NodeFlow(nodeID) < bounds.storageMin {
+			return fmt.Errorf("node %d has stored flow of %d which does not meet or exceed its demand of %d", nodeID, t.NodeFlow(nodeID), bounds.storageMin)
 		}
 	}
 	return sc.Circulation(t.Circulation)

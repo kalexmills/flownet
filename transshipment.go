@@ -2,18 +2,20 @@ package flownet
 
 import "fmt"
 
-// A Transshipment is a circulation which does not require that the amount of flow entering a node
-// remains strictly equal to the amount of flow exiting a node. In other words, some of the
-// flow is allowed to remain in the node without flowing out. Each node also has a capacity and a
-// demand. Every node in a Transshipment has zero capacity and demand until SetNodeBounds is called.
+// A Transshipment is a circulation which allows flow to remain in a node without flowing out.
+// Each node has an amount of storage, with an associated minimum and maximum.
+// By default, every node in a Transshipment stores no extra flow.
+//
+// Transshipments can be used to model problems in which flow leaks or is consumed at certain
+// points in the network.
 type Transshipment struct {
 	Circulation
 	bounds      map[int]bounds
-	specialNode int // a special node used to model node demand/capacity
+	specialNode int
 }
 
 type bounds struct {
-	capacity, demand int64
+	storageMax, storageMin int64
 }
 
 // NewTransshipment constructs a new graph, allocating enough capacity for the provided number of nodes.
@@ -26,14 +28,14 @@ func NewTransshipment(numNodes int) Transshipment {
 }
 
 // SetNodeBounds sets the upper and lower bounds on capacity which is allowed to stay in a node.
-func (t *Transshipment) SetNodeBounds(nodeID int, capacity, demand int64) error {
+func (t *Transshipment) SetNodeBounds(nodeID int, storageMin, storageMax int64) error {
 	if nodeID < 0 || t.numNodes <= nodeID {
 		return fmt.Errorf("node node with ID %d is known", nodeID)
 	}
-	if capacity < demand {
-		return fmt.Errorf("capacity cannot be smaller than demand: capacity = %d, demand = %d", capacity, demand)
+	if storageMax < storageMin {
+		return fmt.Errorf("storageMax cannot be smaller than storageMin: storageMin = %d, storageMax = %d", storageMin, storageMax)
 	}
-	t.bounds[nodeID+2] = bounds{capacity, demand}
+	t.bounds[nodeID+2] = bounds{storageMax, storageMin}
 	return nil
 }
 
@@ -51,7 +53,7 @@ func (t *Transshipment) PushRelabel() {
 		t.specialNode = t.Circulation.AddNode()
 	}
 	for nodeID, bounds := range t.bounds {
-		t.Circulation.AddEdge(nodeID, t.specialNode, bounds.capacity, bounds.demand)
+		t.Circulation.AddEdge(nodeID, t.specialNode, bounds.storageMax, bounds.storageMin)
 	}
 	t.Circulation.PushRelabel()
 }

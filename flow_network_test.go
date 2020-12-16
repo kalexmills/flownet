@@ -7,6 +7,34 @@ import (
 	"github.com/kalexmills/flownet"
 )
 
+func TestAddEdge(t *testing.T) {
+	g := flownet.NewFlowNetwork(5)
+	tests := []struct {
+		fromID, toID int
+		capacity     int64
+		expectedErr  bool
+	}{
+		{0, 1, 1, false},
+		{0, 4, 1, false},
+		{0, 0, 1, false}, // TODO: self-loops should probably not be allowed (definitely?)
+		{flownet.Sink, 2, 1, true},
+		{2, flownet.Source, 1, true},
+		{-4, 0, 1, true},
+		{0, -4, 1, true},
+		{6, 0, 1, true},
+		{0, 6, 1, true},
+	}
+	for _, test := range tests {
+		err := g.AddEdge(test.fromID, test.toID, test.capacity)
+		if err == nil && test.expectedErr {
+			t.Errorf("expected error when adding edge %d -> %d with capacity %d", test.fromID, test.toID, test.capacity)
+		}
+		if err != nil && !test.expectedErr {
+			t.Errorf("found unexpected error when adding edge %d -> %d with capacity %d", test.fromID, test.toID, test.capacity)
+		}
+	}
+}
+
 func TestSanityAllFlowNetworks(t *testing.T) {
 	visitAllInstances(t, func(t *testing.T, path string, instance TestInstance) error {
 		graph := flownet.NewFlowNetwork(instance.numNodes)

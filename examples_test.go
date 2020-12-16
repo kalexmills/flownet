@@ -46,7 +46,7 @@ func ExampleFlowNetwork() {
 	// 	edge 3 -> 5:  flow = 7 / 7
 }
 
-// Demonstrates how to use a circulation to set lower-bounds on edges.
+// Demonstrates how to use a circulation to work with node and edge demands.
 func ExampleCirculation() {
 	c := flownet.NewCirculation(6)
 	type edge struct {

@@ -50,12 +50,15 @@ type edge struct {
 	from, to int
 }
 
+// reverse returns the reversed edge.
 func (e edge) reverse() edge {
 	return edge{from: e.to, to: e.from}
 }
 
-// internal source and sink IDs... why not?
+// sourceID is the internal id for the source node.
 const sourceID = 0
+
+// sinkID is the internal id for the sink node.
 const sinkID = 1
 
 // NewFlowNetwork constructs a new graph, preallocating enough memory for the provided number of nodes.
@@ -182,16 +185,17 @@ func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
 // will remain unchanged. If any node is added after SetNodeOrder is called, the node order will reset to the default.
 func (g *FlowNetwork) SetNodeOrder(nodeIDs []int) error {
 	if len(nodeIDs) != g.numNodes {
-		return fmt.Errorf("not enough nodeIDs; expected %d of them", g.numNodes)
+		return fmt.Errorf("wrong number of nodeIDs; expected exactly %d of them", g.numNodes)
 	}
 	ids := make(map[int]struct{})
-	mappedIds := make([]int, 0, g.numNodes)
-	for _, id := range nodeIDs {
+	mappedIds := make([]int, g.numNodes)
+	// reverse the nodeIDs here, since PushRelabel's queue runs backwards
+	for i, id := range nodeIDs {
 		if id < 0 || id >= g.numNodes {
 			return fmt.Errorf("unknown node ID %d", id)
 		}
 		ids[id] = struct{}{}
-		mappedIds = append(mappedIds, id+2)
+		mappedIds[g.numNodes-1-i] = id + 2
 	}
 	if len(ids) != g.numNodes {
 		return fmt.Errorf("duplicate nodeIDs were present, saw %d unique ids", len(ids))
@@ -327,12 +331,12 @@ func (g *FlowNetwork) enableManualSink() {
 // nodes connected to the source, using the provided less function to break any ties that are found.
 // if the flow network is not a DAG (which is allowed) this function reports an error.
 func TopSort(fn FlowNetwork, less func(int, int) bool) ([]int, error) {
-	unvisitedEdges := make(map[int]map[int]struct{}) // map from nodeIDs to their set of incoming nodes
+	unvisitedEdges := make([]map[int]struct{}, fn.numNodes+2) // list of nodeIDs to the set of their of incoming nodes
 	for edge, capacity := range fn.capacity {
 		if capacity <= 0 {
 			continue
 		}
-		if _, ok := unvisitedEdges[edge.to]; !ok {
+		if unvisitedEdges[edge.to] == nil {
 			unvisitedEdges[edge.to] = make(map[int]struct{})
 		}
 		unvisitedEdges[edge.to][edge.from] = struct{}{}
