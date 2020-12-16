@@ -28,7 +28,9 @@ type FlowNetwork struct {
 	// nodeOrder contains the order in which nodes are discharged.
 	nodeOrder []int
 	// adjacencyList is a map from source nodes to a set of destination nodes in no particular order.
-	adjacencyList map[int]map[int]struct{}
+	adjacencyList []map[int]struct{}
+	// adjacencyVisitList is a list of adjacency lists in the order nodes are visited.
+	adjacencyVisitList [][]int
 	// capacity contains a map from each edge to its capacity.
 	capacity map[edge]int64
 	// preflow contains a map from each edge to its flow value.
@@ -65,7 +67,7 @@ const sinkID = 1
 func NewFlowNetwork(numNodes int) FlowNetwork {
 	result := FlowNetwork{
 		numNodes:      numNodes,
-		adjacencyList: make(map[int]map[int]struct{}, numNodes+2),
+		adjacencyList: make([]map[int]struct{}, numNodes+2),
 		capacity:      make(map[edge]int64, 2*numNodes), // preallocate assuming avg. node degree = 2
 		preflow:       make(map[edge]int64, 2*numNodes),
 		excess:        make([]int64, numNodes+2),
@@ -73,6 +75,7 @@ func NewFlowNetwork(numNodes int) FlowNetwork {
 		seen:          make([]int, numNodes+2),
 	}
 	result.adjacencyList[sourceID] = make(map[int]struct{})
+	result.adjacencyList[sinkID] = make(map[int]struct{})
 	// all nodes begin their life connected to the source and sink nodes
 	for i := 0; i < numNodes; i++ {
 		result.adjacencyList[i+2] = make(map[int]struct{})
@@ -126,15 +129,13 @@ func (g *FlowNetwork) AddNode() int {
 	g.excess = append(g.excess, 0)
 	g.label = append(g.label, 0)
 	g.seen = append(g.seen, 0)
+	g.adjacencyList = append(g.adjacencyList, make(map[int]struct{}))
 	if !g.manualSource {
 		g.capacity[edge{sourceID, id + 2}] = math.MaxInt64
 		g.adjacencyList[sourceID][id+2] = struct{}{}
 	}
 	if !g.manualSink {
 		g.capacity[edge{id + 2, sinkID}] = math.MaxInt64
-		if _, ok := g.adjacencyList[id+2]; !ok {
-			g.adjacencyList[id+2] = make(map[int]struct{})
-		}
 		g.adjacencyList[id+2][sinkID] = struct{}{}
 	}
 	return id
