@@ -263,7 +263,7 @@ func (g *FlowNetwork) discharge(nodeID int) {
 		if g.seen[nodeID] < g.numNodes+2 {
 			v := g.seen[nodeID]
 			e := edge{nodeID, v}
-			if g.residual(e) > 0 && g.label[nodeID] > g.label[v] {
+			if g.residual(e) > 0 && g.label[nodeID] == g.label[v]+1 {
 				g.push(e)
 			} else {
 				g.seen[nodeID]++ // TODO: 'seen' needs to index the outgoing edges of a node.
