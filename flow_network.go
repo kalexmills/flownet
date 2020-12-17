@@ -229,13 +229,14 @@ func (g *FlowNetwork) SetNodeOrder(nodeIDs []int) error {
 	}
 	ids := make(map[int]struct{})
 	mappedIds := make([]int, g.numNodes)
-	// reverse the nodeIDs here, since PushRelabel's queue runs backwards
+
 	for i, id := range nodeIDs {
 		if id < 0 || id >= g.numNodes {
 			return fmt.Errorf("unknown node ID %d", id)
 		}
 		ids[id] = struct{}{}
-		mappedIds[g.numNodes-1-i] = id + 2
+		// reverse the nodeIDs here, since PushRelabel's queue runs backwards
+		mappedIds[g.numNodes-1-i] = internalID(id)
 	}
 	if len(ids) != g.numNodes {
 		return fmt.Errorf("duplicate nodeIDs were present, saw %d unique ids", len(ids))
@@ -249,13 +250,7 @@ func (g *FlowNetwork) SetNodeOrder(nodeIDs []int) error {
 // excess flow from the node. This may update the node's label. When a node's label changes as a result of
 // the algorithm, it is moved to the front of the node order, and all nodes are visited once more.
 func (g *FlowNetwork) PushRelabel() {
-	if len(g.nodeOrder) != g.numNodes {
-		g.nodeOrder = make([]int, 0, g.numNodes)
-		for i := 0; i < g.numNodes; i++ {
-			g.nodeOrder = append(g.nodeOrder, g.numNodes-1-i+2)
-		}
-	}
-	g.reset()
+	g.reset() // TODO: this makes it impossible to 'reflow'.
 	nodeQueue := append(make([]int, 0, g.numNodes), g.nodeOrder...)
 	p := len(nodeQueue) - 1
 	for p >= 0 {
@@ -295,6 +290,7 @@ func (g *FlowNetwork) relabel(nodeID int) {
 		}
 	}
 	if minHeight+1 == math.MaxInt32 {
+		// TODO: don't panic here, the client may disapprove.
 		log.Fatalf("could not relabel node %d", nodeID-2)
 	}
 }
@@ -319,10 +315,16 @@ func (g *FlowNetwork) discharge(nodeID int) {
 
 // reset prepares the network for computing a new flow.
 func (g *FlowNetwork) reset() {
+	if len(g.nodeOrder) != g.numNodes {
+		g.nodeOrder = make([]int, 0, g.numNodes)
+		for i := 0; i < g.numNodes; i++ {
+			g.nodeOrder = append(g.nodeOrder, g.numNodes-1-i+2)
+		}
+	}
 	// construct an adjacency visit list that is compatible with nodeOrder (since nodeOrder may have changed.)
-	// TODO: we don't need to do this if the nodeOrder or set of nodes _hasn't_ changed.
 	g.adjacencyVisitList = make([][]int, len(g.adjacencyList))
 	for u := range g.adjacencyList {
+		// TODO: we don't need to do this if the nodeOrder or set of nodes _hasn't_ changed.
 		for _, v := range append(g.nodeOrder, []int{sourceID, sinkID}...) {
 			_, ok1 := g.adjacencyList[u][v]
 			_, ok2 := g.adjacencyList[v][u]
@@ -334,29 +336,29 @@ func (g *FlowNetwork) reset() {
 	g.label[sourceID] = g.numNodes + 2
 	g.label[sinkID] = 0
 	for i := 0; i < g.numNodes; i++ {
-		g.label[i+2] = 0
+		g.label[internalID(i)] = 0
 	}
 	for e := range g.preflow {
 		g.preflow[e] = 0
 	}
 	// set the capacity, excess, and flow for edges leading out from from source; using the max outgoing capacity of any node adjacent to source.
 	totalCapacity := int64(0)
-	for u := 0; u < g.numNodes; u++ {
-		if _, ok := g.capacity[edge{sourceID, u + 2}]; !ok {
+	for u := 2; u < g.numNodes+2; u++ {
+		if _, ok := g.capacity[edge{sourceID, u}]; !ok {
 			continue
 		}
 		outgoingCapacity := int64(0)
-		for v := range g.adjacencyList[u+2] {
+		for v := range g.adjacencyList[u] {
 			if v == sinkID || v == sourceID {
 				continue
 			}
-			outgoingCapacity += g.capacity[edge{u + 2, v}]
+			outgoingCapacity += g.capacity[edge{u, v}]
 		}
 		totalCapacity += outgoingCapacity
 
-		g.capacity[edge{sourceID, u + 2}] = outgoingCapacity
-		g.excess[u+2] = outgoingCapacity
-		g.preflow[edge{sourceID, u + 2}] = outgoingCapacity
+		g.capacity[edge{sourceID, u}] = outgoingCapacity
+		g.excess[u] = outgoingCapacity
+		g.preflow[edge{sourceID, u}] = outgoingCapacity
 	}
 	g.excess[sourceID] = -totalCapacity
 }
@@ -366,7 +368,7 @@ func (g *FlowNetwork) enableManualSource() {
 		return
 	}
 	g.manualSource = true
-	// disconnect all nodes from source/sink; programmer wants to do it themselves.
+	// disconnect all nodes from source and sink; programmer wants to do it themselves.
 	for i := 2; i < g.numNodes+2; i++ {
 		delete(g.capacity, edge{sourceID, i})
 		delete(g.adjacencyList[sourceID], i)
@@ -378,7 +380,7 @@ func (g *FlowNetwork) enableManualSink() {
 		return
 	}
 	g.manualSink = true
-	// disconnect all nodes from source/sink; programmer wants to do it themselves.
+	// disconnect all nodes from source and sink; programmer wants to do it themselves.
 	for i := 2; i < g.numNodes+2; i++ {
 		delete(g.capacity, edge{i, sinkID})
 		delete(g.adjacencyList[i], sinkID)
@@ -387,7 +389,7 @@ func (g *FlowNetwork) enableManualSink() {
 
 // TopSort returns a topological ordering of the nodes in the provided FlowNetwork, starting from the
 // nodes connected to the source, using the provided less function to break any ties that are found.
-// if the flow network is not a DAG (which is allowed) this function reports an error.
+// if the flow network is not a DAG (which is allowed) this function will report an error.
 func TopSort(fn FlowNetwork, less func(int, int) bool) ([]int, error) {
 	unvisitedEdges := make([]map[int]struct{}, fn.numNodes+2) // list of nodeIDs to the set of their of incoming nodes
 	for edge, capacity := range fn.capacity {
