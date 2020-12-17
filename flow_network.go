@@ -3,6 +3,7 @@ package flownet
 import (
 	"container/heap"
 	"fmt"
+	"log"
 	"math"
 )
 
@@ -118,6 +119,9 @@ func (g FlowNetwork) Capacity(from, to int) int64 {
 
 // residual returns the same result as Residual, but could be cheaper for internal use.
 func (g FlowNetwork) residual(e edge) int64 {
+	if g.capacity[e] == 0 {
+		return g.preflow[e.reverse()]
+	}
 	return g.capacity[e] - g.preflow[e]
 }
 
@@ -214,13 +218,13 @@ func (g *FlowNetwork) SetNodeOrder(nodeIDs []int) error {
 // excess flow from the node. This may update the node's label. When a node's label changes as a result of
 // the algorithm, it is moved to the front of the node order, and all nodes are visited once more.
 func (g *FlowNetwork) PushRelabel() {
-	g.reset()
 	if len(g.nodeOrder) != g.numNodes {
 		g.nodeOrder = make([]int, 0, g.numNodes)
 		for i := 0; i < g.numNodes; i++ {
-			g.nodeOrder = append(g.nodeOrder, i+2)
+			g.nodeOrder = append(g.nodeOrder, g.numNodes-1-i+2)
 		}
 	}
+	g.reset()
 	nodeQueue := append(make([]int, 0, g.numNodes), g.nodeOrder...)
 	p := len(nodeQueue) - 1
 	for p >= 0 {
@@ -241,50 +245,68 @@ func (g *FlowNetwork) PushRelabel() {
 // constraint.
 func (g *FlowNetwork) push(e edge) {
 	delta := min64(g.excess[e.from], g.residual(e))
-	g.preflow[e] += delta
-	g.preflow[e.reverse()] -= delta
+	if g.capacity[e] > 0 {
+		g.preflow[e] += delta
+	} else {
+		g.preflow[e.reverse()] -= delta
+	}
 	g.excess[e.from] -= delta
 	g.excess[e.to] += delta
 }
 
 // relabel increases the label of an node with no excess to one larger than the minimum of its neighbors.
 func (g *FlowNetwork) relabel(nodeID int) {
-	minHeight := math.MaxInt64
-	for i := 0; i < g.numNodes+2; i++ { // TODO: use the adjacency list here (when I tried; I got an infinite loop :T)
-		if g.residual(edge{nodeID, i}) > 0 {
-			minHeight = min(minHeight, g.label[i])
+	minHeight := math.MaxInt32
+	for _, u := range g.adjacencyVisitList[nodeID] {
+		if g.residual(edge{nodeID, u}) > 0 {
+			minHeight = min(minHeight, g.label[u])
 			g.label[nodeID] = minHeight + 1
 		}
+	}
+	if minHeight+1 == math.MaxInt32 {
+		log.Fatalf("could not relabel node %d", nodeID-2)
 	}
 }
 
 // discharge pushes as much excess from nodeID to its unseen neighbors as possible.
 func (g *FlowNetwork) discharge(nodeID int) {
 	for g.excess[nodeID] > 0 {
-		if g.seen[nodeID] < g.numNodes+2 {
-			v := g.seen[nodeID]
+		if g.seen[nodeID] == len(g.adjacencyVisitList[nodeID]) {
+			g.relabel(nodeID)
+			g.seen[nodeID] = 0
+		} else {
+			v := g.adjacencyVisitList[nodeID][g.seen[nodeID]]
 			e := edge{nodeID, v}
 			if g.residual(e) > 0 && g.label[nodeID] == g.label[v]+1 {
 				g.push(e)
 			} else {
-				g.seen[nodeID]++ // TODO: 'seen' needs to index the outgoing edges of a node.
+				g.seen[nodeID]++
 			}
-		} else {
-			g.relabel(nodeID)
-			g.seen[nodeID] = 0
 		}
 	}
 }
 
 // reset prepares the network for computing a new flow.
 func (g *FlowNetwork) reset() {
+	// construct an adjacency visit list that is compatible with nodeOrder (since nodeOrder may have changed.)
+	// TODO: we don't need to do this if the nodeOrder or set of nodes _hasn't_ changed.
+	g.adjacencyVisitList = make([][]int, len(g.adjacencyList))
+	for u := range g.adjacencyList {
+		for _, v := range append(g.nodeOrder, []int{sourceID, sinkID}...) {
+			_, ok1 := g.adjacencyList[u][v]
+			_, ok2 := g.adjacencyList[v][u]
+			if ok1 || ok2 {
+				g.adjacencyVisitList[u] = append([]int{v}, g.adjacencyVisitList[u]...)
+			}
+		}
+	}
 	g.label[sourceID] = g.numNodes + 2
 	g.label[sinkID] = 0
 	for i := 0; i < g.numNodes; i++ {
 		g.label[i+2] = 0
 	}
-	for id := range g.preflow {
-		g.preflow[id] = 0
+	for e := range g.preflow {
+		g.preflow[e] = 0
 	}
 	// set the capacity of edges from source; using the max outgoing capacity of any node adjacent to source.
 	totalCapacity := int64(0) // N.B. totalCapacity only exists to force a panic on integer overflow during tests.
@@ -299,17 +321,16 @@ func (g *FlowNetwork) reset() {
 			}
 			outgoingCapacity += g.capacity[edge{u + 2, v}]
 		}
-		g.capacity[edge{sourceID, u + 2}] = outgoingCapacity
 		totalCapacity += outgoingCapacity
+
+		g.capacity[edge{sourceID, u + 2}] = outgoingCapacity
+		g.excess[u+2] = outgoingCapacity
+		g.preflow[edge{sourceID, u + 2}] = outgoingCapacity
 	}
 	// saturate all outgoing edges from source by setting their excess as high as possible.
 	// N.B. if the sum of the max capacity of edges leaving source exceeds math.MaxInt64, this step will
 	// break under test and arbitrary precision arithmetic will need to be used.
-	g.excess[sourceID] = math.MaxInt64
-	g.push(edge{sourceID, sinkID})
-	for i := 0; i < g.numNodes; i++ {
-		g.push(edge{sourceID, i + 2})
-	}
+	g.excess[sourceID] = -totalCapacity
 }
 
 func (g *FlowNetwork) enableManualSource() {
