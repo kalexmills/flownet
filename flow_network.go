@@ -256,7 +256,7 @@ func (g *FlowNetwork) push(e edge) {
 
 // relabel increases the label of an node with no excess to one larger than the minimum of its neighbors.
 func (g *FlowNetwork) relabel(nodeID int) {
-	minHeight := math.MaxInt32
+	minHeight := math.MaxInt32 - 1
 	for _, u := range g.adjacencyVisitList[nodeID] {
 		if g.residual(edge{nodeID, u}) > 0 {
 			minHeight = min(minHeight, g.label[u])
@@ -308,8 +308,8 @@ func (g *FlowNetwork) reset() {
 	for e := range g.preflow {
 		g.preflow[e] = 0
 	}
-	// set the capacity of edges from source; using the max outgoing capacity of any node adjacent to source.
-	totalCapacity := int64(0) // N.B. totalCapacity only exists to force a panic on integer overflow during tests.
+	// set the capacity, excess, and flow for edges leading out from from source; using the max outgoing capacity of any node adjacent to source.
+	totalCapacity := int64(0)
 	for u := 0; u < g.numNodes; u++ {
 		if _, ok := g.capacity[edge{sourceID, u + 2}]; !ok {
 			continue
@@ -327,9 +327,6 @@ func (g *FlowNetwork) reset() {
 		g.excess[u+2] = outgoingCapacity
 		g.preflow[edge{sourceID, u + 2}] = outgoingCapacity
 	}
-	// saturate all outgoing edges from source by setting their excess as high as possible.
-	// N.B. if the sum of the max capacity of edges leaving source exceeds math.MaxInt64, this step will
-	// break under test and arbitrary precision arithmetic will need to be used.
 	g.excess[sourceID] = -totalCapacity
 }
 
