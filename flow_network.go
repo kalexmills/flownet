@@ -163,12 +163,10 @@ func (g *FlowNetwork) AddNode() int {
 	g.seen = append(g.seen, 0)
 	g.adjacencyList = append(g.adjacencyList, make(map[int]struct{}))
 	if !g.manualSource {
-		g.capacity[edge{sourceID, id + 2}] = math.MaxInt64
-		g.adjacencyList[sourceID][id+2] = struct{}{}
+		g.addEdge(Source, id, math.MaxInt64)
 	}
 	if !g.manualSink {
-		g.capacity[edge{id + 2, sinkID}] = math.MaxInt64
-		g.adjacencyList[id+2][sinkID] = struct{}{}
+		g.addEdge(id, Sink, math.MaxInt64)
 	}
 	return id
 }
