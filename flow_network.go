@@ -53,15 +53,46 @@ type edge struct {
 	from, to int
 }
 
+// newEdge constructs an edge between external node IDS fromID and toID.
+func newEdge(fromID, toID int) edge {
+	return edge{
+		from: internalID(fromID),
+		to:   internalID(toID),
+	}
+}
+func fromSource(toID int) edge {
+	return edge{
+		from: sourceID,
+		to:   internalID(toID),
+	}
+}
+
+func toSink(fromID int) edge {
+	return edge{
+		from: internalID(fromID),
+		to:   sinkID,
+	}
+}
+
+// internalID converts an external node ID to an internal node ID.
+func internalID(externalID int) int {
+	return externalID + 2
+}
+
+// externalID converts an internal node ID to an external node ID.
+func externalID(internalID int) int {
+	return internalID - 2
+}
+
 // reverse returns the reversed edge.
 func (e edge) reverse() edge {
 	return edge{from: e.to, to: e.from}
 }
 
-// sourceID is the internal id for the source node.
+// sourceID is the internal ID for the source node.
 const sourceID = 0
 
-// sinkID is the internal id for the sink node.
+// sinkID is the internal ID for the sink node.
 const sinkID = 1
 
 // NewFlowNetwork constructs a new graph, preallocating enough memory for the provided number of nodes.
@@ -79,13 +110,10 @@ func NewFlowNetwork(numNodes int) FlowNetwork {
 	result.adjacencyList[sinkID] = make(map[int]struct{})
 	// all nodes begin their life connected to the source and sink nodes
 	for i := 0; i < numNodes; i++ {
-		result.adjacencyList[i+2] = make(map[int]struct{})
+		result.adjacencyList[internalID(i)] = make(map[int]struct{})
 
-		result.adjacencyList[sourceID][i+2] = struct{}{}
-		result.adjacencyList[i+2][sinkID] = struct{}{}
-
-		result.capacity[edge{sourceID, i + 2}] = math.MaxInt64
-		result.capacity[edge{i + 2, sinkID}] = math.MaxInt64
+		result.addEdge(Source, i, math.MaxInt64)
+		result.addEdge(i, Sink, math.MaxInt64)
 	}
 	return result
 }
@@ -104,17 +132,17 @@ func (g FlowNetwork) Outflow() int64 {
 
 // Flow returns the flow along an edge. Before PushRelabel is called this method returns 0.
 func (g FlowNetwork) Flow(from, to int) int64 {
-	return g.preflow[edge{from + 2, to + 2}]
+	return g.preflow[newEdge(from, to)]
 }
 
 // Residual returns the residual flow along an edge, defined as capacity - flow.
 func (g FlowNetwork) Residual(from, to int) int64 {
-	return g.residual(edge{from + 2, to + 2})
+	return g.residual(newEdge(from, to))
 }
 
 // Capacity returns the capacity of the provided edge.
 func (g FlowNetwork) Capacity(from, to int) int64 {
-	return g.capacity[edge{from + 2, to + 2}]
+	return g.capacity[newEdge(from, to)]
 }
 
 // residual returns the same result as Residual, but could be cheaper for internal use.
@@ -169,8 +197,7 @@ func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
 	}
 
 	// actually set the capacity! woo! (finally)
-	g.capacity[edge{fromID + 2, toID + 2}] = capacity
-	g.adjacencyList[fromID+2][toID+2] = struct{}{}
+	g.addEdge(fromID, toID, capacity)
 
 	// auto-remove any connections from/to the source/sink pseudonodes (if they're managed automatically)
 	if !g.manualSource {
@@ -182,6 +209,12 @@ func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
 		delete(g.adjacencyList[fromID+2], sinkID)
 	}
 	return nil
+}
+
+func (g *FlowNetwork) addEdge(fromID, toID int, capacity int64) {
+	g.capacity[edge{fromID + 2, toID + 2}] = capacity
+	g.adjacencyList[fromID+2][toID+2] = struct{}{}
+
 }
 
 // SetNodeOrder sets the order in which nodes are initially visited by the PushRelabel algorithm. By default, nodes

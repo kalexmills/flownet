@@ -1,3 +1,5 @@
+// util_test.go defines utility functions used during testing.
+
 package flownet_test
 
 import (
