@@ -138,8 +138,10 @@ func (c *Circulation) PushRelabel() {
 	for e, demand := range c.demand {
 		if demand != 0 {
 			c.FlowNetwork.capacity[edge{e.from, sinkID}] += demand
-			c.FlowNetwork.capacity[edge{sourceID, e.to}] += demand
+			c.FlowNetwork.adjacencyList[e.from][sinkID] = struct{}{}
 
+			c.FlowNetwork.capacity[edge{sourceID, e.to}] += demand
+			c.FlowNetwork.adjacencyList[sourceID][e.to] = struct{}{}
 		}
 		if demand > 0 {
 			targetValue += demand
@@ -160,8 +162,4 @@ func (c *Circulation) PushRelabel() {
 
 	// find the max-flow in the resulting flow network.
 	c.FlowNetwork.PushRelabel()
-
-	if err := SanityChecks.Circulation(*c); err != nil {
-		fmt.Println(err)
-	}
 }
