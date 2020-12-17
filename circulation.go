@@ -77,12 +77,11 @@ func (c *Circulation) AddEdge(fromID, toID int, capacity, demand int64) error {
 	if capacity < demand {
 		return fmt.Errorf("capacity cannot be smaller than demand; capacity = %d, demand = %d", capacity, demand)
 	}
-	if err := c.FlowNetwork.AddEdge(fromID, toID, capacity); err != nil {
+	if err := c.FlowNetwork.AddEdge(fromID, toID, capacity-demand); err != nil {
 		return err
 	}
+	// TODO: use external node IDs in demand since this is kind of external to the FlowNetwork.
 	e := edge{fromID + 2, toID + 2}
-
-	c.capacity[e] = capacity - demand
 
 	if demand != 0 {
 		c.demand[e] = demand
@@ -137,6 +136,7 @@ func (c *Circulation) PushRelabel() {
 	targetValue := int64(0)
 	for e, demand := range c.demand {
 		if demand != 0 {
+			//c.addEdge(externalID(e.from), Sink, c.FlowNetwork.capacity[edge{e.from, sinkID}]+demand)
 			c.FlowNetwork.capacity[edge{e.from, sinkID}] += demand
 			c.FlowNetwork.adjacencyList[e.from][sinkID] = struct{}{}
 
@@ -149,8 +149,8 @@ func (c *Circulation) PushRelabel() {
 	}
 
 	if len(c.demand) == 0 { // handle no edge demands
-		c.FlowNetwork.capacity[edge{sourceID, c.nodeSource + 2}] = math.MaxInt64
-		c.FlowNetwork.capacity[edge{c.nodeSink + 2, sinkID}] = math.MaxInt64
+		c.FlowNetwork.capacity[fromSource(c.nodeSource)] = math.MaxInt64
+		c.FlowNetwork.capacity[toSink(c.nodeSink)] = math.MaxInt64
 		delete(c.FlowNetwork.capacity, edge{c.nodeSink + 2, c.nodeSource + 2})
 		for _, demand := range c.nodeDemand {
 			if demand > 0 {
