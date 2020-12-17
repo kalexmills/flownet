@@ -250,6 +250,8 @@ func (g *FlowNetwork) SetNodeOrder(nodeIDs []int) error {
 // excess flow from the node. This may update the node's label. When a node's label changes as a result of
 // the algorithm, it is moved to the front of the node order, and all nodes are visited once more.
 func (g *FlowNetwork) PushRelabel() {
+	// implementation based heavily on these notes:
+	// https://www.ccs.neu.edu/home/vip/teach/Algorithms/11_graphsC_networks/push_relabel.pdf
 	g.reset() // TODO: this makes it impossible to 'reflow'.
 	nodeQueue := append(make([]int, 0, g.numNodes), g.nodeOrder...)
 	p := len(nodeQueue) - 1
