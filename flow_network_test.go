@@ -16,13 +16,15 @@ func TestAddEdge(t *testing.T) {
 	}{
 		{0, 1, 1, false},
 		{0, 4, 1, false},
-		{0, 0, 1, false}, // TODO: self-loops should probably not be allowed (definitely?)
+		{0, 0, 1, true},
 		{flownet.Sink, 2, 1, true},
 		{2, flownet.Source, 1, true},
 		{-4, 0, 1, true},
 		{0, -4, 1, true},
 		{6, 0, 1, true},
 		{0, 6, 1, true},
+		{1, 0, 0, false},
+		{0, 1, -1, true},
 	}
 	for _, test := range tests {
 		err := g.AddEdge(test.fromID, test.toID, test.capacity)

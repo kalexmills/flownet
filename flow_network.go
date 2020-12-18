@@ -108,7 +108,7 @@ func NewFlowNetwork(numNodes int) FlowNetwork {
 	}
 	result.adjacencyList[sourceID] = make(map[int]struct{})
 	result.adjacencyList[sinkID] = make(map[int]struct{})
-	// all nodes begin their life connected to the source and sink nodes
+	// by default, all nodes begin life connected to the source and sink nodes
 	for i := 0; i < numNodes; i++ {
 		result.adjacencyList[internalID(i)] = make(map[int]struct{})
 
@@ -175,6 +175,9 @@ func (g *FlowNetwork) AddNode() int {
 // Attempting to use flownet.Source as toId or flownet.Sink as fromID yields an error. An error is returned
 // if either fromID or toID are not valid node IDs.
 func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
+	if fromID == toID {
+		return fmt.Errorf("self-loops are not allowed, found one with %d -> %d", fromID, toID)
+	}
 	if fromID < -2 || fromID >= g.numNodes {
 		return fmt.Errorf("no node with ID %d is known", fromID)
 	}

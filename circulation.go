@@ -6,10 +6,6 @@ import (
 	"math"
 )
 
-// TODO: we have to use multiple sources and sinks to handle BOTH node demands AND edge demands!
-//       whenever we add a new constraint, we connect the old source/sink to one another with an infinite capacity edge
-//       then we use the new source/sink to enforce the new constraints.
-
 // A Circulation is a flow network which has an additional demand associated with each of its nodes
 // or edges. Flow may be supplied to the network via negative node demands.
 //
