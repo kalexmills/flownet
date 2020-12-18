@@ -1,4 +1,6 @@
-// Package flownet provides algorithms for solving optimization problems on a flow network.
+// Package flownet provides algorithms for solving maximum-flow and circulation with node and/or edge demands.
+// It implements a push-relabel algorithm for maximum flow and provides a wrapper for specifying circulation
+// problems.
 package flownet
 
 import (
