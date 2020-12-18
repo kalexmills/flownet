@@ -114,7 +114,7 @@ func (c *Circulation) NodeDemand(nodeID int) int64 {
 	return c.nodeDemand[nodeID]
 }
 
-// SatisfiesDemand is true iff the flow satisfies all of its required demand.
+// SatisfiesDemand is true iff the flow satisfies all of the required node and edge demands.
 func (c *Circulation) SatisfiesDemand() bool {
 	return c.Outflow() == c.targetValue
 }

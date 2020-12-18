@@ -67,19 +67,17 @@ func (sc SanityCheckers) Circulation(c Circulation) error {
 		return err
 	}
 	if !c.SatisfiesDemand() {
-		// we have nothing  to check unless demand was satisfied
+		// we have nothing to check unless demand was satisfied
 		return nil
 	}
 	for edge := range c.FlowNetwork.preflow {
 		flow := c.Flow(edge.from, edge.to)
-		if flow <= 0 {
-			continue // exclude back-edges
-		}
 		demand := c.EdgeDemand(edge.from, edge.to)
 		if flow < demand {
 			return fmt.Errorf("edge from %d to %d has flow %d which is less than demand %d", edge.from, edge.to, flow, demand)
 		}
 	}
+	// TODO: check node demand
 	return nil
 }
 
