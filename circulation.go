@@ -95,6 +95,12 @@ func (c *Circulation) AddEdge(fromID, toID int, capacity, demand int64) error {
 	return nil
 }
 
+// Underflow is the amount of demand that is unable to be satisfied with the current constraints.
+// It is available after running PushRelabel.
+func (c *Circulation) Underflow() int64 {
+	return c.targetValue - c.Outflow()
+}
+
 // Capacity returns the capacity of the provided edge.
 func (c *Circulation) Capacity(from, to int) int64 {
 	return c.FlowNetwork.Capacity(from, to) + c.demand[edge{from, to}]
@@ -147,15 +153,20 @@ func (c *Circulation) PushRelabel() {
 		}
 	}
 
-	if len(c.demand) == 0 { // handle no edge demands
+	for u, demand := range c.nodeDemand {
+		if demand > 0 {
+			c.addEdge(u, Sink, demand)
+			targetValue += demand
+		}
+		if demand < 0 {
+			c.addEdge(Source, u, -demand)
+		}
+	}
+
+	if targetValue == 0 { // handle no node or edge demands
 		c.addEdge(Source, c.nodeSource, math.MaxInt64)
 		c.addEdge(c.nodeSink, Sink, math.MaxInt64)
 		c.addEdge(c.nodeSink, c.nodeSource, 0)
-		for _, demand := range c.nodeDemand {
-			if demand > 0 {
-				targetValue += demand
-			}
-		}
 	}
 	c.targetValue = targetValue
 

@@ -119,7 +119,7 @@ func NewFlowNetwork(numNodes int) FlowNetwork {
 }
 
 // Outflow returns the amount of flow which leaves the network via the sink. After PushRelabel has
-// been called, this will be a solution to the max-flow problem.
+// been called, this will be the amount of flow entering the sink.
 func (g FlowNetwork) Outflow() int64 {
 	result := int64(0)
 	for edge, flow := range g.preflow { // TODO: optimize via caching
