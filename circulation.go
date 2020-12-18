@@ -86,7 +86,6 @@ func (c *Circulation) AddEdge(fromID, toID int, capacity, demand int64) error {
 	if err := c.FlowNetwork.AddEdge(fromID, toID, capacity-demand); err != nil {
 		return err
 	}
-	// TODO: use external node IDs in demand since this is kind of external to the FlowNetwork.
 	e := edge{fromID, toID}
 
 	if demand != 0 {
