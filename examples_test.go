@@ -82,13 +82,13 @@ func ExampleCirculation() {
 	}
 	//Output:
 	// demand satisfied: true
-	// total flow: 4
-	// 	edge 0 -> 1:  flow = 3 / 15	demand = 0
-	// 	edge 0 -> 2:  flow = 1 / 4	demand = 0
-	// 	edge 1 -> 3:  flow = 7 / 12	demand = 0
+	// total flow: 8
+	// 	edge 0 -> 1:  flow = 0 / 15	demand = 0
+	// 	edge 0 -> 2:  flow = 4 / 4	demand = 0
+	// 	edge 1 -> 3:  flow = 8 / 12	demand = 0
 	// 	edge 3 -> 2:  flow = 3 / 3	demand = 0
-	// 	edge 2 -> 4:  flow = 4 / 10	demand = 0
+	// 	edge 2 -> 4:  flow = 7 / 10	demand = 0
 	// 	edge 4 -> 1:  flow = 4 / 5	demand = 4
-	// 	edge 4 -> 5:  flow = 0 / 10	demand = 0
-	// 	edge 3 -> 5:  flow = 4 / 7	demand = 0
+	// 	edge 4 -> 5:  flow = 3 / 10	demand = 0
+	// 	edge 3 -> 5:  flow = 5 / 7	demand = 0
 }
