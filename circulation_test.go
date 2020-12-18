@@ -10,7 +10,7 @@ import (
 
 func TestSanityAllCirculations(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
-	visitAllInstances(t, func(t *testing.T, path string, instance TestInstance) error {
+	visitAllInstances(t, CircInstances, func(t *testing.T, path string, instance TestInstance) error {
 		graph := flownet.NewCirculation(instance.numNodes)
 
 		for edge, cap := range instance.capacities {
@@ -26,15 +26,22 @@ func TestSanityAllCirculations(t *testing.T) {
 			if cap <= 0 {
 				continue
 			}
-			randomDemand := rand.Int63n(2)
-			if err := graph.AddEdge(edge.from, edge.to, cap, randomDemand); err != nil {
+			demand, ok := instance.demands[edge]
+			if !ok {
+				demand = 0
+			}
+			if err := graph.AddEdge(edge.from, edge.to, cap, demand); err != nil {
 				t.Error(err)
 			}
 		}
 		graph.PushRelabel()
 		outflow := graph.Outflow()
-		t.Logf("test %s had a flow of %d", path, outflow)
-		t.Logf("test %s satisfied demand? %t", path, graph.SatisfiesDemand())
+		if instance.expectedFlow != -1 {
+			if instance.expectedFlow != outflow {
+				t.Errorf("expected %d units of flow, found %d", instance.expectedFlow, outflow)
+			}
+		}
+		t.Logf("test %s had a flow of %d; satisfied demand? %t", path, outflow, graph.SatisfiesDemand())
 		if err := flownet.SanityChecks.Circulation(graph); err != nil {
 			t.Errorf("sanity checks failed: %v", err)
 			return err

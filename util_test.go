@@ -13,7 +13,10 @@ import (
 	"testing"
 )
 
-func visitAllInstances(t *testing.T, visit func(*testing.T, string, TestInstance) error) {
+const FlowInstances = ".flow"
+const CircInstances = ".circ"
+
+func visitAllInstances(t *testing.T, suffix string, visit func(*testing.T, string, TestInstance) error) {
 	filepath.Walk("testdata", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -21,7 +24,7 @@ func visitAllInstances(t *testing.T, visit func(*testing.T, string, TestInstance
 		if info.IsDir() {
 			return nil
 		}
-		if !strings.HasSuffix(path, ".flow") {
+		if !strings.HasSuffix(path, suffix) {
 			return nil
 		}
 		f, err := os.Open(path)
@@ -55,6 +58,7 @@ func loadInstance(reader io.Reader) (TestInstance, error) {
 	result := TestInstance{
 		expectedFlow: expectedFlow,
 		capacities:   make(map[Edge]int64),
+		demands:      make(map[Edge]int64),
 	}
 	maxNodeId := 0
 	for scanner.Scan() {
@@ -62,15 +66,20 @@ func loadInstance(reader io.Reader) (TestInstance, error) {
 			continue
 		}
 		fields := strings.Split(scanner.Text(), " ")
-		if len(fields) != 3 {
-			return TestInstance{}, fmt.Errorf("expected 3 space-separated fields on line reading: %s", scanner.Text())
+		if len(fields) < 3 || len(fields) > 4 {
+			return TestInstance{}, fmt.Errorf("expected 3-4 space-separated fields on line reading: %s", scanner.Text())
 		}
 		ints, err := parseInts(fields)
 		if err != nil {
 			return TestInstance{}, fmt.Errorf("could not parse line as integers: %w", err)
 		}
-		result.capacities[Edge{ints[0], ints[1]}] = int64(ints[2])
+		e := Edge{ints[0], ints[1]}
+		result.capacities[e] = int64(ints[2])
+		if len(fields) == 4 {
+			result.demands[e] = int64(ints[3])
+		}
 		maxNodeId = max(max(maxNodeId, ints[0]), ints[1])
+
 	}
 	result.numNodes = maxNodeId + 1
 	return result, nil
@@ -92,6 +101,7 @@ type TestInstance struct {
 	numNodes     int
 	expectedFlow int64
 	capacities   map[Edge]int64
+	demands      map[Edge]int64
 }
 
 type Edge struct {

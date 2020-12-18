@@ -7,7 +7,7 @@ import (
 )
 
 func TestSanityCheckAllTransshipments(t *testing.T) {
-	visitAllInstances(t, func(t *testing.T, path string, instance TestInstance) error {
+	visitAllInstances(t, FlowInstances, func(t *testing.T, path string, instance TestInstance) error {
 		graph := flownet.NewTransshipment(instance.numNodes)
 		for edge, cap := range instance.capacities {
 			if edge.from < 0 || edge.to < 0 {

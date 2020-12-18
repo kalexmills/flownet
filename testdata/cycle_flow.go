@@ -17,11 +17,11 @@ func main() {
 
 	for idx, sizes := range [][]int{uniformCycles(20, 10), uniformCycles(10, 20)} {
 		capacities, expected := makeCyclic(100, sizes...)
-		writeFile(fmt.Sprintf("cycles_small_%d.flow", idx), capacities, expected)
+		writeFile(fmt.Sprintf("cycles_small_%d.circ", idx), capacities, expected)
 	}
 	for idx, sizes := range [][]int{uniformCycles(50, 50), uniformCycles(60, 40), uniformCycles(70, 30)} {
 		capacities, expected := makeCyclic(100, sizes...)
-		writeFile(fmt.Sprintf("cycles_medium_%d.flow", idx), capacities, expected)
+		writeFile(fmt.Sprintf("cycles_medium_%d.circ", idx), capacities, expected)
 	}
 }
 
@@ -53,7 +53,7 @@ func makeCyclic(nodes int, sizes ...int) (capacities, int64) {
 		result[edge{perm[length-1], perm[0]}] = weight
 	}
 	// connect nodes to source/sink
-	perm := rand.Perm(nodes)
+	perm := rand.Perm(nodes) // form a random cycle by randomly permuting the nodes
 	for i := 0; i < nodes/10; i++ {
 		if rand.Float32() < 0.5 {
 			result[edge{flownet.Source, perm[i]}] = 10

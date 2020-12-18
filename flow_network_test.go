@@ -38,7 +38,7 @@ func TestAddEdge(t *testing.T) {
 }
 
 func TestSanityAllFlowNetworks(t *testing.T) {
-	visitAllInstances(t, func(t *testing.T, path string, instance TestInstance) error {
+	visitAllInstances(t, FlowInstances, func(t *testing.T, path string, instance TestInstance) error {
 		graph := flownet.NewFlowNetwork(instance.numNodes)
 		for edge, cap := range instance.capacities {
 			if err := graph.AddEdge(edge.from, edge.to, cap); err != nil {
@@ -67,7 +67,7 @@ func TestSanityAllFlowNetworks(t *testing.T) {
 }
 
 func TestTopSortAllFlowNetworks(t *testing.T) {
-	visitAllInstances(t, func(t *testing.T, path string, instance TestInstance) error {
+	visitAllInstances(t, FlowInstances, func(t *testing.T, path string, instance TestInstance) error {
 		graph := flownet.NewFlowNetwork(instance.numNodes)
 		for edge, cap := range instance.capacities {
 			if err := graph.AddEdge(edge.from, edge.to, cap); err != nil {
