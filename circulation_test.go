@@ -37,7 +37,7 @@ func TestSanityAllCirculations(t *testing.T) {
 		graph.PushRelabel()
 		outflow := graph.Outflow()
 		if instance.expectedFlow != -1 {
-			if instance.expectedFlow < outflow {
+			if instance.expectedFlow > outflow {
 				t.Errorf("expected at least %d units of flow, found %d", instance.expectedFlow, outflow)
 			}
 		}
