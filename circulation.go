@@ -35,8 +35,10 @@ type Circulation struct {
 func NewCirculation(numNodes int) Circulation {
 	return Circulation{
 		FlowNetwork: NewFlowNetwork(numNodes),
-		demand:      make(map[edge]int64),
-		nodeDemand:  make(map[int]int64),
+		// demand maps from edges (using external nodeIDs) to the demand along each edge.
+		demand: make(map[edge]int64),
+		// nodeDemand maps from external nodeIDs to the demand for each node.
+		nodeDemand: make(map[int]int64),
 	}
 }
 
@@ -63,16 +65,20 @@ func (c *Circulation) SetNodeDemand(nodeID int, demand int64) error {
 	if demand < 0 {
 		c.FlowNetwork.AddEdge(c.nodeSource, nodeID, -demand)
 	}
-	c.nodeDemand[nodeID+2] = demand
+	c.nodeDemand[nodeID] = demand
 	return nil
 }
 
-// AddEdge sets the capacity and demand of the edge in the flow network. An error is returned
+// AddEdge sets the capacity and non-negative demand of the edge in the circulation. An error is returned
 // if either fromID or toID are not valid node IDs. Adding an edge twice has no additional effect.
 // Setting demands on edges also updates the demand on the adjacent nodes.
 func (c *Circulation) AddEdge(fromID, toID int, capacity, demand int64) error {
 	if fromID == Source || fromID == Sink || toID == Source || toID == Sink {
+		// TODO: could source/sink be interpreted as the 'special' nodeSource / nodeSink?
 		return fmt.Errorf("edges to/from the source/sink nodes cannot be used in a Circulation")
+	}
+	if demand < 0 {
+		return fmt.Errorf("edge demands must be non-zero")
 	}
 	if capacity < demand {
 		return fmt.Errorf("capacity cannot be smaller than demand; capacity = %d, demand = %d", capacity, demand)
@@ -81,7 +87,7 @@ func (c *Circulation) AddEdge(fromID, toID int, capacity, demand int64) error {
 		return err
 	}
 	// TODO: use external node IDs in demand since this is kind of external to the FlowNetwork.
-	e := edge{fromID + 2, toID + 2}
+	e := edge{fromID, toID}
 
 	if demand != 0 {
 		c.demand[e] = demand
@@ -94,26 +100,26 @@ func (c *Circulation) AddEdge(fromID, toID int, capacity, demand int64) error {
 
 // Capacity returns the capacity of the provided edge.
 func (c *Circulation) Capacity(from, to int) int64 {
-	return c.FlowNetwork.Capacity(from, to) + c.demand[edge{from + 2, to + 2}]
+	return c.FlowNetwork.Capacity(from, to) + c.demand[edge{from, to}]
 }
 
 // Flow returns the flow achieved by the circulation along the provided edge. The results are
 // only meaningful after PushRelabel has been run.
 func (c *Circulation) Flow(from, to int) int64 {
-	return c.FlowNetwork.Flow(from, to) + c.demand[edge{from + 2, to + 2}]
+	return c.FlowNetwork.Flow(from, to) + c.demand[edge{from, to}]
 }
 
 // EdgeDemand returns the demand required along each edge.
 func (c *Circulation) EdgeDemand(from, to int) int64 {
-	return c.demand[edge{from + 2, to + 2}]
+	return c.demand[edge{from, to}]
 }
 
 // NodeDemand returns the demand required at each node.
 func (c *Circulation) NodeDemand(nodeID int) int64 {
-	return c.nodeDemand[nodeID+2]
+	return c.nodeDemand[nodeID]
 }
 
-// SatisfiesDemand is true iff the flow satisfies all required demand.
+// SatisfiesDemand is true iff the flow satisfies all of its required demand.
 func (c *Circulation) SatisfiesDemand() bool {
 	return c.Outflow() == c.targetValue
 }
@@ -136,12 +142,8 @@ func (c *Circulation) PushRelabel() {
 	targetValue := int64(0)
 	for e, demand := range c.demand {
 		if demand != 0 {
-			//c.addEdge(externalID(e.from), Sink, c.FlowNetwork.capacity[edge{e.from, sinkID}]+demand)
-			c.FlowNetwork.capacity[edge{e.from, sinkID}] += demand
-			c.FlowNetwork.adjacencyList[e.from][sinkID] = struct{}{}
-
-			c.FlowNetwork.capacity[edge{sourceID, e.to}] += demand
-			c.FlowNetwork.adjacencyList[sourceID][e.to] = struct{}{}
+			c.addEdge(e.from, Sink, c.Capacity(e.from, Sink)+demand)
+			c.addEdge(Source, e.to, c.Capacity(Source, e.to)+demand)
 		}
 		if demand > 0 {
 			targetValue += demand
@@ -149,9 +151,9 @@ func (c *Circulation) PushRelabel() {
 	}
 
 	if len(c.demand) == 0 { // handle no edge demands
-		c.FlowNetwork.capacity[fromSource(c.nodeSource)] = math.MaxInt64
-		c.FlowNetwork.capacity[toSink(c.nodeSink)] = math.MaxInt64
-		delete(c.FlowNetwork.capacity, edge{c.nodeSink + 2, c.nodeSource + 2})
+		c.addEdge(Source, c.nodeSource, math.MaxInt64)
+		c.addEdge(c.nodeSink, Sink, math.MaxInt64)
+		c.addEdge(c.nodeSink, c.nodeSource, 0)
 		for _, demand := range c.nodeDemand {
 			if demand > 0 {
 				targetValue += demand

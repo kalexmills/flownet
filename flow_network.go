@@ -15,8 +15,8 @@ const Sink int = -1
 
 // A FlowNetwork is a directed graph which can be used to solve maximum-flow problems. Each edge is
 // associated with a capacity and a flow. The flow on each edge may not exceed the stated capacity.
-// Each node may be connected to a source or a sink node.
 //
+// Each node may optionally be connected to a source or a sink node.
 // By default, nodes which do not have any incoming edges are presumed to be connected to the source,
 // while nodes which have no outgoing edges are presumed to be connected to the sink. These default
 // source/sink connections all have maximum capacity of math.MaxInt64. The first time AddEdge is called
@@ -186,6 +186,9 @@ func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
 	}
 	if fromID == Sink {
 		return fmt.Errorf("no node can be connected to from the sink pseudonode")
+	}
+	if capacity < 0 {
+		return fmt.Errorf("capacities must be non-negative")
 	}
 	if fromID == Source {
 		g.enableManualSource()
